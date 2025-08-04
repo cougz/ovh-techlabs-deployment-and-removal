@@ -21,19 +21,14 @@ fi
 echo "📥 Pulling latest changes from git..."
 git pull
 
-# Step 1: Navigate to docker directory (detect automatically)
-DOCKER_DIR=""
-if [ -d "docker" ]; then
-    DOCKER_DIR="docker"
-elif [ -d "platform" ]; then
-    DOCKER_DIR="platform"
-else
-    echo "❌ Error: Could not find docker or platform directory"
+# Step 1: Check if we're in the root directory with docker-compose files
+if [ ! -f "docker-compose.yml" ]; then
+    echo "❌ Error: docker-compose.yml not found in current directory"
+    echo "📁 Make sure you're running this script from the project root"
     exit 1
 fi
 
-echo "📁 Navigating to $DOCKER_DIR directory..."
-cd "$DOCKER_DIR"
+echo "📁 Using current directory (root) for Docker Compose operations..."
 
 # Step 1: Bring down the Docker Compose stack
 echo "📉 Bringing down Docker Compose stack..."
@@ -43,12 +38,9 @@ sudo docker compose down
 if [[ "$RESET_DATA" == "true" ]]; then
     echo "🗑️  Removing specific Docker volumes..."
     VOLUMES_TO_REMOVE=(
-        "docker_postgres_data"
-        "docker_redis_data"
-        "docker_terraform_workspaces"
-        "platform_postgres_data"
-        "platform_redis_data"
-        "platform_terraform_workspaces"
+        "ovh-techlabs-deployment-and-removal_postgres_data"
+        "ovh-techlabs-deployment-and-removal_redis_data"
+        "ovh-techlabs-deployment-and-removal_terraform_workspaces"
     )
 
     for volume in "${VOLUMES_TO_REMOVE[@]}"; do
