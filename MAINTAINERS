@@ -1,0 +1,56 @@
+# MAINTAINERS
+
+This file lists the maintainers of the OVHcloud TechLabs project.
+
+Maintainers are responsible for:
+- Reviewing and merging pull requests
+- Managing releases
+- Triaging issues
+- Setting project direction
+- Ensuring code quality and security
+
+## Active Maintainers
+
+### Lead Maintainers
+* OVHcloud TechLabs Team
+  - GitHub: @ovhcloud/techlabs
+  - Responsibilities: Overall project direction, releases, architecture decisions
+
+* Tim Seiffert
+  - Email: Tim.Seiffert@ovhcloud.com
+  - Responsibilities: Platform development and technical architecture
+
+### Platform Maintainers
+* Platform Team
+  - Responsibilities: Backend API, infrastructure automation, deployment tools
+
+### Workbooks Maintainers  
+* Content Team
+  - Responsibilities: Tutorial content, documentation, workshop materials
+
+## Emeritus Maintainers
+
+<!-- List former maintainers here with their contributions -->
+
+## Becoming a Maintainer
+
+We welcome new maintainers! If you're interested in becoming a maintainer:
+
+1. Demonstrate sustained contribution to the project
+2. Show expertise in relevant areas
+3. Help with issue triage and pull request reviews
+4. Be nominated by existing maintainers
+5. Receive approval from lead maintainers
+
+## Maintainer Responsibilities
+
+- Respond to issues and pull requests in a timely manner
+- Ensure contributions meet quality standards
+- Maintain project documentation
+- Participate in project planning
+- Uphold the code of conduct
+
+## Contact
+
+For questions about maintenance or to report issues with maintainer response:
+- Open an issue in the repository

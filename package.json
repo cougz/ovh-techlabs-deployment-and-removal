@@ -1,0 +1,23 @@
+{
+  "name": "ovh-techlabs",
+  "version": "1.0.0",
+  "description": "[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/release/python-311/) [![Node.js 18+](https://img.shields.io/badge/node.js-18+-green.svg)](https://nodejs.org/) [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/) [![Project Status: Main](https://img.shields.io/badge/Project%20Status-Main%20Project-green.svg)](https://github.com/ovhcloud/ovh-techlabs)",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cougz/ovh-techlabs.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/cougz/ovh-techlabs/issues"
+  },
+  "homepage": "https://github.com/cougz/ovh-techlabs#readme",
+  "devDependencies": {
+    "jest": "^30.0.4"
+  }
+}

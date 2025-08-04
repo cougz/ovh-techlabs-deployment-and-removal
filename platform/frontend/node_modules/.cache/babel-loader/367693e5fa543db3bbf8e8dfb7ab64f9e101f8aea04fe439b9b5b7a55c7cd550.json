@@ -1,0 +1,1 @@
+{"ast":null,"code":"import defaultErrorMap from \"./locales/en.js\";\nlet overrideErrorMap = defaultErrorMap;\nexport { defaultErrorMap };\nexport function setErrorMap(map) {\n  overrideErrorMap = map;\n}\nexport function getErrorMap() {\n  return overrideErrorMap;\n}","map":null,"metadata":{},"sourceType":"module","externalDependencies":[]}
