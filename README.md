@@ -1,13 +1,23 @@
 # OVHcloud TechLabs - Deployment and Removal Tools
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/release/python-311/)
-[![Node.js 18+](https://img.shields.io/badge/node.js-18+-green.svg)](https://nodejs.org/)
-[![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
 
-🚀 **Programmatic deployment and removal tools for OVHcloud TechLabs environments** - Automated infrastructure management using Terraform and OVHcloud Public Cloud APIs.
+Programmatic deployment and removal tools for OVHcloud TechLabs environments - Automated infrastructure management using Terraform and OVHcloud Public Cloud APIs.
 
-## 📊 Project Overview
+## Project Status
+
+**Status**: Active development - Official TechLabs project  
+**Support Level**: OVHcloud TechLabs team  
+**Type**: Infrastructure automation and deployment tools
+
+> **Note**: This repository contains the production automation platform used to deploy and manage OVHcloud TechLabs workshop environments programmatically.
+
+## Quick Links
+
+- **Source Repository**: [https://github.com/cougz/ovh-techlabs-deployment-and-removal](https://github.com/cougz/ovh-techlabs-deployment-and-removal)
+- **Related**: [TechLabs Workbooks](https://github.com/cougz/ovh-techlabs-workbooks)
+
+## Overview
 
 This repository contains the core infrastructure deployment and removal tools used to programmatically manage TechLabs environments. The platform automates the complete lifecycle of cloud resources using Terraform, Docker, and OVHcloud APIs.
 
@@ -20,7 +30,7 @@ This repository contains the core infrastructure deployment and removal tools us
 - ✅ Real-time deployment monitoring
 - ✅ Reliable cleanup mechanisms with retry logic
 
-## 🎯 Technology Stack
+## Technology Stack
 
 ### Infrastructure Automation
 - **Terraform**: Infrastructure as Code for OVHcloud Public Cloud
@@ -40,7 +50,7 @@ This repository contains the core infrastructure deployment and removal tools us
 - **Redux Toolkit**: State management for deployment workflows
 - **Tailwind CSS**: Responsive UI styling
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 ovh-techlabs-deployment-and-removal/
@@ -55,12 +65,20 @@ ovh-techlabs-deployment-and-removal/
 │   └── src/services/        # API client for deployment calls
 ├── database/                # PostgreSQL schemas and migrations
 ├── docker/                  # Nginx configuration
+├── docs/                    # Additional documentation
 ├── docker-compose.yml       # Production deployment config
 ├── docker-compose.dev.yml   # Development environment
-└── rebuild.sh               # Platform rebuild script
+├── rebuild.sh               # Platform rebuild script
+├── .env.example             # Environment configuration template
+├── AUTHORS                  # Copyright holders
+├── CONTRIBUTING.md          # Contribution guidelines
+├── CONTRIBUTORS             # List of contributors
+├── LICENSE                  # MIT License
+├── LICENSES/                # License information
+└── MAINTAINERS             # Project maintainers
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -99,7 +117,7 @@ docker compose -f docker-compose.dev.yml up -d
 ./rebuild.sh --reset-data
 ```
 
-## 🔧 Deployment Operations
+## Deployment Operations
 
 ### Creating Workshop Environments
 
@@ -150,7 +168,7 @@ curl -X POST http://localhost:8000/api/workshops/process-lifecycle \
   -H "Authorization: Bearer <token>"
 ```
 
-## 🛠️ Terraform Integration
+## Terraform Integration
 
 ### Workshop Templates
 
@@ -167,7 +185,7 @@ The platform uses Terraform modules for different workshop types:
 - **Resource Tagging**: All resources tagged for lifecycle management
 - **Cost Optimization**: Automatic resource sizing and cleanup
 
-## 📊 Monitoring and Operations
+## Monitoring and Operations
 
 ### Health Checks
 
@@ -192,14 +210,14 @@ The platform tracks key deployment metrics:
 - Cleanup completion status
 - Cost per workshop environment
 
-## 🔐 Security Considerations
+## Security Considerations
 
 - **API Authentication**: JWT-based authentication for all operations
 - **Credential Management**: Secure storage of OVHcloud API keys
 - **Network Security**: Isolated environments for each workshop
 - **Audit Logging**: Complete audit trail of all deployment operations
 
-## 🛠️ Development
+## Development
 
 ### Backend Development
 
@@ -241,23 +259,23 @@ python database/migrations/migrate.py migrate
 python database/migrations/migrate.py status
 ```
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on:
+We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) file for detailed guidelines on:
 
 - Adding new Terraform templates
 - Improving deployment reliability  
 - Extending the monitoring dashboard
 - Optimizing resource usage
 
-## 👥 Maintainers
+## Maintainers
 
-See [MAINTAINERS](MAINTAINERS) for the current project maintainers.
+See [MAINTAINERS](MAINTAINERS) for the list of project maintainers.
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-This repository contains the production-ready automation tools used to deploy and manage OVHcloud TechLabs environments programmatically. The platform is designed for scalability, reliability, and efficient resource management.
+**OVHcloud TechLabs** - This repository contains the production-ready automation tools used to deploy and manage OVHcloud TechLabs environments programmatically. The platform is designed for scalability, reliability, and efficient resource management.
