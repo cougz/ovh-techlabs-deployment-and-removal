@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS ovh_resource_audits (
     action_status VARCHAR(50) NOT NULL CHECK (action_status IN ('success', 'failed', 'pending')),
     performed_by VARCHAR(100) NOT NULL,
     error_message TEXT,
-    metadata JSONB,
+    resource_metadata JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

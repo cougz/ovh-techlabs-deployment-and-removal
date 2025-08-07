@@ -43,6 +43,10 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY . .
 
+# Copy and set permissions for entrypoint script (before user switch)
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Create directories
 RUN mkdir -p /tmp/terraform-workspaces
 
@@ -55,10 +59,6 @@ USER appuser
 EXPOSE 8000
 
 # Note: Health checks are defined in docker-compose.yml per service
-
-# Copy entrypoint script
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
 
 # Command
 ENTRYPOINT ["/app/entrypoint.sh"]

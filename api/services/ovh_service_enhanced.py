@@ -84,7 +84,7 @@ class EnhancedOVHService:
     
     def _log_audit(self, resource_type: str, resource_id: str, resource_name: str,
                    action: str, action_status: str, performed_by: str,
-                   error_message: str = None, metadata: Dict = None):
+                   error_message: str = None, resource_metadata: Dict = None):
         """Log audit entry"""
         db = SessionLocal()
         try:
@@ -96,7 +96,7 @@ class EnhancedOVHService:
                 action_status=action_status,
                 performed_by=performed_by,
                 error_message=error_message,
-                metadata=metadata
+                resource_metadata=resource_metadata
             )
             db.add(audit_entry)
             db.commit()
@@ -159,7 +159,7 @@ class EnhancedOVHService:
             self._log_audit(
                 "pci_project", "all", f"{len(pci_projects)} projects",
                 "sync", "success", performed_by,
-                metadata={"count": len(pci_projects)}
+                resource_metadata={"count": len(pci_projects)}
             )
             
             logger.info(f"Found {len(pci_projects)} PCI projects")
@@ -223,7 +223,7 @@ class EnhancedOVHService:
             self._log_audit(
                 "pci_project", service_id, project_name,
                 "delete", "success", performed_by,
-                metadata=project_details
+                resource_metadata=project_details
             )
             
             logger.info(f"Successfully initiated deletion of PCI project {service_id}")
@@ -305,7 +305,7 @@ class EnhancedOVHService:
             self._log_audit(
                 "iam_user", "all", f"{len(users)} users",
                 "sync", "success", performed_by,
-                metadata={"count": len(users)}
+                resource_metadata={"count": len(users)}
             )
             
             return users, False
@@ -376,7 +376,7 @@ class EnhancedOVHService:
             self._log_audit(
                 "iam_policy", "all", f"{len(formatted_policies)} policies",
                 "sync", "success", performed_by,
-                metadata={"count": len(formatted_policies)}
+                resource_metadata={"count": len(formatted_policies)}
             )
             
             return formatted_policies, False
@@ -496,7 +496,7 @@ class EnhancedOVHService:
                     'action_status': log.action_status,
                     'performed_by': log.performed_by,
                     'error_message': log.error_message,
-                    'metadata': log.metadata,
+                    'metadata': log.resource_metadata,
                     'created_at': log.created_at.isoformat()
                 }
                 for log in logs

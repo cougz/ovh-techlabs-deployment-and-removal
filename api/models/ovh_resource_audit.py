@@ -16,7 +16,7 @@ class OVHResourceAudit(Base):
     action_status = Column(String(50), nullable=False)   # 'success', 'failed', 'pending'
     performed_by = Column(String(100), nullable=False)   # User who performed action
     error_message = Column(Text)
-    metadata = Column(JSON)                              # Additional resource details
+    resource_metadata = Column(JSON)                     # Additional resource details
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Indexes for performance
