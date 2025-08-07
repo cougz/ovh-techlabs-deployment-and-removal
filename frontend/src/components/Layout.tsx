@@ -8,7 +8,10 @@ import {
   CogIcon,
   ArrowRightOnRectangleIcon as LogoutIcon,
   Bars3Icon as MenuIcon,
-  XMarkIcon as XIcon
+  XMarkIcon as XIcon,
+  CloudIcon,
+  UsersIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 
 import { RootState } from '../store';
@@ -26,6 +29,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user } = useSelector((state: RootState) => state.auth);
   const { sidebarOpen } = useSelector((state: RootState) => state.ui);
 
+  // XSS protection helper
+  const sanitizeUserInput = (input: string): string => {
+    if (!input) return '';
+    // Remove potentially dangerous characters and limit length
+    return input.replace(/[<>\"'&]/g, '').substring(0, 50);
+  };
+
   const handleLogout = () => {
     dispatch(logout());
   };
@@ -34,6 +44,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'Workshops', href: '/workshops', icon: AcademicCapIcon },
     { name: 'Settings', href: '/settings', icon: CogIcon },
+  ];
+
+  const ovhResourcesNavigation = [
+    { name: 'PCI Projects', href: '/ovh/pci-projects', icon: CloudIcon },
+    { name: 'IAM Users', href: '/ovh/iam-users', icon: UsersIcon },
+    { name: 'IAM Policies', href: '/ovh/iam-policies', icon: ShieldCheckIcon },
   ];
 
   return (
@@ -52,7 +68,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </button>
         </div>
         
-        <nav className="mt-5 px-2">
+        <nav className="mt-5 px-2 space-y-6">
+          {/* Main Navigation */}
           <div className="space-y-1">
             {navigation.map((item) => (
               <NavLink
@@ -71,6 +88,33 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               </NavLink>
             ))}
           </div>
+
+          {/* OVH Resources Section */}
+          <div>
+            <div className="px-2 py-1">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                OVH Resources
+              </h3>
+            </div>
+            <div className="space-y-1 mt-2">
+              {ovhResourcesNavigation.map((item) => (
+                <NavLink
+                  key={item.name}
+                  to={item.href}
+                  className={({ isActive }) =>
+                    `group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
+                      isActive
+                        ? 'bg-ovh-800 text-white'
+                        : 'text-gray-300 hover:bg-ovh-700 hover:text-white'
+                    }`
+                  }
+                >
+                  <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
+                  {item.name}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         </nav>
         
         {/* User info */}
@@ -81,7 +125,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <UserGroupIcon className="h-5 w-5 text-white" />
               </div>
               <div className="ml-3">
-                <p className="text-sm font-medium text-white">{user?.username || 'User'}</p>
+                <p className="text-sm font-medium text-white">{sanitizeUserInput(user?.username || 'User')}</p>
                 <p className="text-xs text-gray-300">Administrator</p>
               </div>
             </div>

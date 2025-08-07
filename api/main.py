@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, WebSocket
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from contextlib import asynccontextmanager
@@ -48,9 +48,45 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Accept",
+        "Accept-Language",
+        "Content-Language",
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With"
+    ],
+    expose_headers=["X-Total-Count"],
+    max_age=3600  # Cache preflight for 1 hour
 )
+
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "font-src 'self'; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'none'"
+    )
+    
+    # Remove server header if present
+    if "server" in response.headers:
+        del response.headers["server"]
+    
+    return response
 
 # Include routers
 app.include_router(health.router, prefix="/health", tags=["health"])
@@ -60,9 +96,9 @@ app.include_router(attendees.router, prefix="/api/attendees", tags=["attendees"]
 app.include_router(deployments.router, prefix="/api/deployments", tags=["deployments"])
 app.include_router(config_routes.router, prefix="/api/settings", tags=["settings"])
 app.include_router(templates.router, prefix="/api/templates", tags=["templates"])
-app.include_router(pci_projects.router, prefix="/api/pci-projects", tags=["pci-projects"])
-app.include_router(iam_users.router, prefix="/api/iam-users", tags=["iam-users"])
-app.include_router(iam_policies.router, prefix="/api/iam-policies", tags=["iam-policies"])
+app.include_router(pci_projects.router, prefix="/api/ovh/pci-projects", tags=["pci-projects"])
+app.include_router(iam_users.router, prefix="/api/ovh/iam-users", tags=["iam-users"])
+app.include_router(iam_policies.router, prefix="/api/ovh/iam-policies", tags=["iam-policies"])
 app.include_router(internal.router, prefix="/internal", tags=["internal"])
 
 # Root endpoint

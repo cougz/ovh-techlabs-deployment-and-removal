@@ -1,16 +1,25 @@
 from pydantic_settings import BaseSettings
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, validator
 from typing import List, Optional
 import os
 import json
+import secrets
+from cryptography.fernet import Fernet
 
 class Settings(BaseSettings):
     # Database
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
-    DB_NAME: str = "techlabs_automation"
-    DB_USER: str = "postgres"
-    DB_PASSWORD: str = "postgres"
+    DB_HOST: str = Field(default="localhost", description="Database host")
+    DB_PORT: int = Field(default=5432, ge=1, le=65535, description="Database port")
+    DB_NAME: str = Field(min_length=1, max_length=64, description="Database name")
+    DB_USER: str = Field(min_length=1, max_length=64, description="Database user")
+    DB_PASSWORD: str = Field(min_length=1, description="Database password")
+    
+    @field_validator('DB_PASSWORD')
+    @classmethod
+    def validate_db_password(cls, v):
+        if not v or v == "postgres" or len(v) < 8:
+            raise ValueError("Database password must be at least 8 characters and not use default values")
+        return v
     
     @property
     def DATABASE_URL(self) -> str:
@@ -20,9 +29,17 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"
     
     # Application
-    SECRET_KEY: str = "your-secret-key-here"
-    DEBUG: bool = True
-    CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000"])
+    SECRET_KEY: str = Field(min_length=32, description="Application secret key")
+    DEBUG: bool = Field(default=False, description="Debug mode")
+    CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000"], description="Allowed CORS origins")
+    
+    @field_validator('SECRET_KEY')
+    @classmethod
+    def validate_secret_key(cls, v):
+        if not v or v == "your-secret-key-here" or len(v) < 32:
+            if not v or v == "your-secret-key-here":
+                v = secrets.token_urlsafe(32)
+        return v
     
     @field_validator('CORS_ORIGINS', mode='before')
     @classmethod
@@ -39,15 +56,32 @@ class Settings(BaseSettings):
         return v
     
     # JWT
-    JWT_SECRET_KEY: str = "your-jwt-secret-key"
-    JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    JWT_SECRET_KEY: str = Field(default="", description="JWT secret key")
+    JWT_ALGORITHM: str = Field(default="HS256", description="JWT algorithm")
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, ge=5, le=1440, description="JWT expiration minutes")
+    
+    @field_validator('JWT_SECRET_KEY')
+    @classmethod
+    def validate_jwt_secret(cls, v):
+        if not v or v == "your-jwt-secret-key" or len(v) < 32:
+            if not v or v == "your-jwt-secret-key":
+                v = secrets.token_urlsafe(32)
+        return v
     
     # OVHcloud
-    OVH_ENDPOINT: str = "ovh-eu"
-    OVH_APPLICATION_KEY: str = ""
-    OVH_APPLICATION_SECRET: str = ""
-    OVH_CONSUMER_KEY: str = ""
+    OVH_ENDPOINT: str = Field(default="ovh-eu", description="OVH API endpoint")
+    OVH_APPLICATION_KEY: str = Field(description="OVH application key")
+    OVH_APPLICATION_SECRET: str = Field(description="OVH application secret")
+    OVH_CONSUMER_KEY: str = Field(description="OVH consumer key")
+    
+    @field_validator('OVH_APPLICATION_KEY', 'OVH_APPLICATION_SECRET', 'OVH_CONSUMER_KEY')
+    @classmethod
+    def validate_ovh_credentials(cls, v, info):
+        if not v:
+            raise ValueError(f"{info.field_name} is required")
+        if len(v) < 8:
+            raise ValueError(f"{info.field_name} must be at least 8 characters")
+        return v
     
     # Terraform
     TERRAFORM_BINARY_PATH: str = "/usr/local/bin/terraform"
@@ -68,12 +102,27 @@ class Settings(BaseSettings):
     MAX_ATTENDEES_PER_WORKSHOP: int = 50
     
     # Security
-    ENCRYPTION_KEY: str = "your-encryption-key"
-    ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1", "0.0.0.0"]
-    INTERNAL_API_KEY: str = "internal-api-secret-key"
+    ENCRYPTION_KEY: str = Field(default="", description="Encryption key for sensitive data")
+    ALLOWED_HOSTS: List[str] = Field(default=["localhost", "127.0.0.1"], description="Allowed hosts")
+    INTERNAL_API_KEY: str = Field(default="", description="Internal API key")
+    
+    @field_validator('ENCRYPTION_KEY')
+    @classmethod
+    def validate_encryption_key(cls, v):
+        if not v or v == "your-encryption-key":
+            v = Fernet.generate_key().decode()
+        return v
+    
+    @field_validator('INTERNAL_API_KEY')
+    @classmethod
+    def validate_internal_api_key(cls, v):
+        if not v or v == "internal-api-secret-key" or len(v) < 32:
+            if not v or v == "internal-api-secret-key":
+                v = secrets.token_urlsafe(32)
+        return v
     
     # Logging
-    LOG_LEVEL: str = "INFO"
+    LOG_LEVEL: str = "DEBUG"
     LOG_FILE: Optional[str] = None
     
     # Rate limiting
@@ -95,6 +144,38 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._mask_sensitive_fields()
+    
+    def _mask_sensitive_fields(self):
+        """Mask sensitive fields in logs and error messages"""
+        sensitive_fields = [
+            'DB_PASSWORD', 'SECRET_KEY', 'JWT_SECRET_KEY', 
+            'OVH_APPLICATION_SECRET', 'OVH_CONSUMER_KEY',
+            'ENCRYPTION_KEY', 'INTERNAL_API_KEY', 'SMTP_PASSWORD'
+        ]
+        for field in sensitive_fields:
+            if hasattr(self, field):
+                value = getattr(self, field)
+                if value:
+                    setattr(self, f'_{field}_MASKED', value[:4] + '*' * (len(value) - 4) if len(value) > 4 else '****')
+    
+    @property
+    def safe_dict(self):
+        """Return a dictionary with sensitive values masked for logging"""
+        config_dict = self.dict()
+        sensitive_fields = [
+            'DB_PASSWORD', 'SECRET_KEY', 'JWT_SECRET_KEY', 
+            'OVH_APPLICATION_SECRET', 'OVH_CONSUMER_KEY',
+            'ENCRYPTION_KEY', 'INTERNAL_API_KEY', 'SMTP_PASSWORD'
+        ]
+        for field in sensitive_fields:
+            if field in config_dict and config_dict[field]:
+                value = config_dict[field]
+                config_dict[field] = value[:4] + '*' * (len(value) - 4) if len(value) > 4 else '****'
+        return config_dict
 
 # Global settings instance
 settings = Settings()

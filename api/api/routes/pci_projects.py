@@ -5,6 +5,9 @@ from api.routes.auth import get_current_user
 from services.ovh_service_enhanced import enhanced_ovh_service
 from schemas.pci_project import PCIProjectResponse, PCIProjectBulkDeleteRequest, PCIProjectSearchRequest, PCIProjectAuditLog
 from api.websocket import manager
+from core.logging import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -51,6 +54,46 @@ async def list_pci_projects(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch PCI projects: {str(e)}"
+        )
+
+@router.get("/filter", response_model=List[PCIProjectResponse])
+async def filter_pci_projects(
+    state: Optional[str] = Query(None, description="Filter by project state"),
+    search: Optional[str] = Query(None, description="Search in project names, IDs, or service IDs"),
+    created_after: Optional[str] = Query(None, description="Filter by creation date (ISO format)"),
+    current_user: str = Depends(get_current_user)
+):
+    """Filter PCI projects with query parameters"""
+    try:
+        projects, _ = enhanced_ovh_service.get_all_pci_projects(use_cache=True)
+        
+        # Apply state filter
+        if state:
+            projects = [p for p in projects if p.get('state') == state]
+        
+        # Apply search filter
+        if search:
+            search_lower = search.lower()
+            projects = [p for p in projects if 
+                       search_lower in p.get('display_name', '').lower() or
+                       search_lower in p.get('project_id', '').lower() or
+                       search_lower in str(p.get('service_id', '')).lower()]
+        
+        # Apply date filter
+        if created_after:
+            from datetime import datetime
+            try:
+                date_threshold = datetime.fromisoformat(created_after)
+                projects = [p for p in projects if p.get('creation_date') and
+                           datetime.fromisoformat(p['creation_date']) > date_threshold]
+            except:
+                pass
+        
+        return projects
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to filter PCI projects: {str(e)}"
         )
 
 @router.post("/search", response_model=List[PCIProjectResponse])
@@ -103,17 +146,29 @@ async def bulk_delete_pci_projects(
     current_user: str = Depends(get_current_user)
 ):
     """Bulk delete PCI projects"""
+    # Log the request for debugging
+    logger.debug(f"Bulk delete request received: {request}")
+    logger.debug(f"Service IDs: {request.service_ids}")
+    
+    if not request.service_ids or len(request.service_ids) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one service ID is required"
+        )
+    
     if len(request.service_ids) > 50:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Maximum 50 projects can be deleted at once"
         )
     
-    if len(request.service_ids) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one service ID is required"
-        )
+    # Validate that all service_ids are strings and not empty
+    for service_id in request.service_ids:
+        if not service_id or not isinstance(service_id, str):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid service ID: {service_id}"
+            )
     
     # Queue as Celery task for background processing
     from tasks.ovh_tasks import bulk_delete_pci_projects_task

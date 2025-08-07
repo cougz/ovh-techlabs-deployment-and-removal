@@ -40,12 +40,40 @@ async def list_iam_users(
             detail=f"Failed to fetch IAM users: {str(e)}"
         )
 
+@router.get("/filter", response_model=List[IAMUserResponse])
+async def filter_iam_users_get(
+    status: Optional[str] = Query(None, description="Filter by status"),
+    group: Optional[str] = Query(None, description="Filter by group"),
+    search: Optional[str] = Query(None, description="Search in username, email, description"),
+    created_after: Optional[str] = Query(None, description="Filter by creation date (ISO format)"),
+    current_user: str = Depends(get_current_user)
+):
+    """Filter IAM users with query parameters"""
+    try:
+        filters = {}
+        if status:
+            filters['status'] = status
+        if group:
+            filters['group'] = group
+        if search:
+            filters['search'] = search
+        if created_after:
+            filters['created_after'] = created_after
+            
+        users = enhanced_ovh_service.filter_iam_users(filters)
+        return users
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Filtering failed: {str(e)}"
+        )
+
 @router.post("/filter", response_model=List[IAMUserResponse])
-async def filter_iam_users(
+async def filter_iam_users_post(
     filters: IAMUserFilterRequest,
     current_user: str = Depends(get_current_user)
 ):
-    """Filter IAM users with advanced criteria"""
+    """Filter IAM users with advanced criteria (POST)"""
     try:
         users = enhanced_ovh_service.filter_iam_users(filters.dict(exclude_unset=True))
         return users
@@ -68,6 +96,58 @@ async def get_iam_user_audit_logs(
         limit=limit
     )
     return logs
+
+@router.delete("/{username}")
+async def delete_iam_user(
+    username: str,
+    current_user: str = Depends(get_current_user)
+):
+    """Delete an IAM user"""
+    success = enhanced_ovh_service.delete_iam_user(username, current_user)
+    
+    if success:
+        # Broadcast deletion via WebSocket
+        await manager.broadcast_to_workshop(
+            "system",
+            {
+                "type": "resource_deleted",
+                "resource_type": "iam_user",
+                "resource_id": username
+            }
+        )
+        return {"message": f"IAM user {username} deleted successfully"}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete IAM user {username}"
+        )
+
+@router.post("/bulk-delete")
+async def bulk_delete_iam_users(
+    usernames: List[str],
+    current_user: str = Depends(get_current_user)
+):
+    """Bulk delete IAM users"""
+    if len(usernames) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete more than 50 users at once"
+        )
+    
+    results = enhanced_ovh_service.bulk_delete_iam_users(usernames, current_user)
+    
+    # Broadcast bulk deletion via WebSocket
+    await manager.broadcast_to_workshop(
+        "system",
+        {
+            "type": "bulk_resource_deleted",
+            "resource_type": "iam_users",
+            "count": len(results["success"]),
+            "results": results
+        }
+    )
+    
+    return results
 
 @router.get("/stats")
 async def get_iam_users_stats(

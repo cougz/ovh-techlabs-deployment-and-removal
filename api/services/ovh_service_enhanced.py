@@ -6,6 +6,7 @@ import asyncio
 from functools import lru_cache
 import backoff
 import time
+import re
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -21,6 +22,10 @@ class EnhancedOVHService:
     
     def __init__(self):
         """Initialize OVH clients"""
+        logger.debug(f"Initializing OVH client with endpoint: {settings.OVH_ENDPOINT}")
+        logger.debug(f"OVH Application Key: {settings.OVH_APPLICATION_KEY[:8] if settings.OVH_APPLICATION_KEY else 'NOT SET'}...")
+        logger.debug(f"OVH Consumer Key: {settings.OVH_CONSUMER_KEY[:8] if settings.OVH_CONSUMER_KEY else 'NOT SET'}...")
+        
         self.client = ovh.Client(
             endpoint=settings.OVH_ENDPOINT,
             application_key=settings.OVH_APPLICATION_KEY,
@@ -28,13 +33,8 @@ class EnhancedOVHService:
             consumer_key=settings.OVH_CONSUMER_KEY
         )
         
-        # V2 client for IAM policies
-        self.client_v2 = ovh.Client(
-            endpoint=settings.OVH_ENDPOINT.replace('ovh-eu', 'ovh-eu-v2'),
-            application_key=settings.OVH_APPLICATION_KEY,
-            application_secret=settings.OVH_APPLICATION_SECRET,
-            consumer_key=settings.OVH_CONSUMER_KEY
-        )
+        # Log the actual endpoint URL that will be used
+        logger.debug(f"OVH Client initialized. Base endpoint URL: {getattr(self.client, '_endpoint', 'UNKNOWN')}")
     
     # ===== Caching Layer =====
     
@@ -127,7 +127,18 @@ class EnhancedOVHService:
             logger.info("Fetching PCI projects from OVH API")
             
             # Get all service IDs
-            service_ids = self.client.get("/services")
+            # Note: OVH SDK uses /1.0 as base, so we don't include version in path
+            api_path = "/services"
+            logger.debug(f"Calling OVH API: GET {api_path}")
+            logger.debug(f"OVH Client endpoint: {getattr(self.client, '_endpoint', 'UNKNOWN')}")
+            logger.debug(f"OVH Client credentials: app_key={bool(getattr(self.client, '_application_key', None))}, consumer_key={bool(getattr(self.client, '_consumer_key', None))}")
+            
+            try:
+                service_ids = self.client.get(api_path)
+                logger.debug(f"Successfully retrieved {len(service_ids)} service IDs")
+            except Exception as e:
+                logger.error(f"Failed to get services: {type(e).__name__}: {str(e)}")
+                raise
             
             pci_projects = []
             
@@ -137,7 +148,9 @@ class EnhancedOVHService:
                 
                 for service_id in batch:
                     try:
-                        service_details = self.client.get(f"/services/{service_id}")
+                        detail_path = f"/services/{service_id}"
+                        logger.debug(f"Calling OVH API: GET {detail_path}")
+                        service_details = self.client.get(detail_path)
                         
                         if (service_details.get('resource', {}).get('product', {}).get('name') == 
                             'publiccloud-project'):
@@ -176,22 +189,36 @@ class EnhancedOVHService:
     
     def search_pci_projects(self, query: str, field: str = "all") -> List[Dict[str, Any]]:
         """Search PCI projects by name, ID, or service ID"""
+        # Input sanitization
+        if not query or len(query.strip()) == 0:
+            return []
+        
+        # Limit query length to prevent abuse
+        if len(query) > 100:
+            raise ValueError("Search query too long")
+        
+        # Sanitize field parameter
+        allowed_fields = ["all", "name", "id", "service_id"]
+        if field not in allowed_fields:
+            raise ValueError(f"Invalid field parameter. Must be one of: {allowed_fields}")
+        
         projects, _ = self.get_all_pci_projects(use_cache=True)
         
-        query_lower = query.lower()
+        # Escape special regex characters in query for safe comparison
+        query_escaped = re.escape(query.strip().lower())
         results = []
         
         for project in projects:
             if field == "all":
-                if (query_lower in project.get('display_name', '').lower() or
-                    query_lower in project.get('project_id', '').lower() or
-                    query_lower in str(project.get('service_id', '')).lower()):
+                if (query_escaped in project.get('display_name', '').lower() or
+                    query_escaped in project.get('project_id', '').lower() or
+                    query_escaped in str(project.get('service_id', '')).lower()):
                     results.append(project)
-            elif field == "name" and query_lower in project.get('display_name', '').lower():
+            elif field == "name" and query_escaped in project.get('display_name', '').lower():
                 results.append(project)
-            elif field == "id" and query_lower in project.get('project_id', '').lower():
+            elif field == "id" and query_escaped in project.get('project_id', '').lower():
                 results.append(project)
-            elif field == "service_id" and query_lower in str(project.get('service_id', '')).lower():
+            elif field == "service_id" and query_escaped in str(project.get('service_id', '')).lower():
                 results.append(project)
         
         return results
@@ -278,7 +305,18 @@ class EnhancedOVHService:
         try:
             logger.info("Fetching IAM users from OVH API")
             
-            user_names = self.client.get("/me/identity/user")
+            # Note: OVH SDK uses /1.0 as base, so we don't include version in path
+            api_path = "/me/identity/user"
+            logger.debug(f"Calling OVH API: GET {api_path}")
+            logger.debug(f"OVH Client endpoint: {getattr(self.client, '_endpoint', 'UNKNOWN')}")
+            logger.debug(f"OVH Client credentials: app_key={bool(getattr(self.client, '_application_key', None))}, consumer_key={bool(getattr(self.client, '_consumer_key', None))}")
+            
+            try:
+                user_names = self.client.get(api_path)
+                logger.debug(f"Successfully retrieved {len(user_names)} user names")
+            except Exception as e:
+                logger.error(f"Failed to get IAM users: {type(e).__name__}: {str(e)}")
+                raise
             logger.info(f"Found {len(user_names)} IAM users")
             
             users = []
@@ -289,7 +327,9 @@ class EnhancedOVHService:
                 
                 for username in batch:
                     try:
-                        user_details = self.client.get(f"/me/identity/user/{username}")
+                        detail_path = f"/me/identity/user/{username}"
+                        logger.debug(f"Calling OVH API: GET {detail_path}")
+                        user_details = self.client.get(detail_path)
                         user_info = self._extract_user_info(username, user_details)
                         users.append(user_info)
                     except Exception as e:
@@ -319,25 +359,90 @@ class EnhancedOVHService:
             )
             raise
     
+    @rate_limiter.rate_limit_decorator('iam_users', 'write')
+    def delete_iam_user(self, username: str, performed_by: str) -> bool:
+        """Delete an IAM user with audit logging"""
+        try:
+            logger.info(f"Deleting IAM user {username}")
+            
+            # Delete the user
+            result = self.client.delete(f"/me/identity/user/{username}")
+            
+            # Clear cache
+            self._invalidate_cache("iam_user")
+            
+            # Log success audit
+            self._log_audit(
+                "iam_user", username, username,
+                "delete", "success", performed_by
+            )
+            
+            logger.info(f"Successfully deleted IAM user {username}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error deleting IAM user {username}: {str(e)}")
+            
+            # Log failure audit
+            self._log_audit(
+                "iam_user", username, username,
+                "delete", "failed", performed_by,
+                error_message=str(e)
+            )
+            return False
+    
+    def bulk_delete_iam_users(self, usernames: List[str], performed_by: str) -> Dict[str, Any]:
+        """Bulk delete IAM users"""
+        results = {
+            "success": [],
+            "failed": [],
+            "total": len(usernames)
+        }
+        
+        for username in usernames:
+            try:
+                if self.delete_iam_user(username, performed_by):
+                    results["success"].append(username)
+                else:
+                    results["failed"].append({"username": username, "error": "Deletion failed"})
+            except Exception as e:
+                results["failed"].append({"username": username, "error": str(e)})
+        
+        return results
+    
     def filter_iam_users(self, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Filter IAM users by various criteria"""
         users, _ = self.get_all_iam_users(use_cache=True)
         
         filtered = users
         
+        # Sanitize filter inputs
         if filters.get('group'):
-            filtered = [u for u in filtered if u['group'] == filters['group']]
+            group = str(filters['group']).strip()
+            if len(group) > 50:
+                raise ValueError("Group filter too long")
+            filtered = [u for u in filtered if u.get('group', '') == group]
         
         if filters.get('status'):
-            filtered = [u for u in filtered if u['status'] == filters['status']]
+            status = str(filters['status']).strip()
+            if len(status) > 20:
+                raise ValueError("Status filter too long")
+            filtered = [u for u in filtered if u.get('status', '') == status]
         
         if filters.get('created_after'):
-            date_threshold = datetime.fromisoformat(filters['created_after'])
-            filtered = [u for u in filtered if u.get('creation') and 
-                       datetime.fromisoformat(u['creation']) > date_threshold]
+            try:
+                date_threshold = datetime.fromisoformat(str(filters['created_after']))
+                filtered = [u for u in filtered if u.get('creation') and 
+                           datetime.fromisoformat(u['creation']) > date_threshold]
+            except ValueError:
+                raise ValueError("Invalid date format for created_after filter")
         
         if filters.get('search'):
-            search_lower = filters['search'].lower()
+            search_term = str(filters['search']).strip()
+            if len(search_term) > 100:
+                raise ValueError("Search term too long")
+            # Escape special characters for safe comparison
+            search_lower = re.escape(search_term.lower())
             filtered = [u for u in filtered if 
                        search_lower in u.get('username', '').lower() or
                        search_lower in u.get('email', '').lower() or
@@ -361,7 +466,18 @@ class EnhancedOVHService:
         try:
             logger.info("Fetching IAM policies from OVH API v2")
             
-            policies = self.client_v2.get("/iam/policy")
+            # Use OVH SDK with v2 API path
+            api_path = "/v2/iam/policy"
+            logger.debug(f"Calling OVH API: GET {api_path}")
+            
+            try:
+                policies = self.client.get(api_path)
+                logger.debug(f"Successfully retrieved {len(policies)} policies from v2 API")
+            except Exception as e:
+                logger.error(f"Failed to get IAM policies from v2: {type(e).__name__}: {str(e)}")
+                # Fallback: empty policy list
+                policies = []
+                logger.warning("Using empty policy list as fallback")
             logger.info(f"Found {len(policies)} IAM policies")
             
             formatted_policies = []
@@ -389,6 +505,75 @@ class EnhancedOVHService:
                 error_message=str(e)
             )
             raise
+    
+    @rate_limiter.rate_limit_decorator('iam_policies', 'write')
+    def delete_iam_policy(self, policy_id: str, performed_by: str) -> bool:
+        """Delete an IAM policy with audit logging"""
+        try:
+            # Get policy details for audit
+            policy_name = 'Unknown'
+            try:
+                policies, _ = self.get_all_iam_policies(use_cache=True)
+                policy = next((p for p in policies if p['id'] == policy_id), None)
+                if policy:
+                    policy_name = policy.get('name', 'Unknown')
+            except:
+                pass
+            
+            logger.info(f"Deleting IAM policy {policy_id} ({policy_name})")
+            
+            # Use OVH SDK with v2 API path
+            # Sanitize policy_id to prevent injection
+            if not re.match(r'^[a-zA-Z0-9\-_]+$', policy_id):
+                raise ValueError("Invalid policy ID format")
+            
+            api_path = f"/v2/iam/policy/{policy_id}"
+            logger.debug(f"Calling OVH API: DELETE {api_path}")
+            
+            # Delete the policy using OVH SDK
+            result = self.client.delete(api_path)
+            
+            # Clear cache
+            self._invalidate_cache("iam_policy")
+            
+            # Log success audit
+            self._log_audit(
+                "iam_policy", policy_id, policy_name,
+                "delete", "success", performed_by
+            )
+            
+            logger.info(f"Successfully deleted IAM policy {policy_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error deleting IAM policy {policy_id}: {str(e)}")
+            
+            # Log failure audit
+            self._log_audit(
+                "iam_policy", policy_id, policy_name,
+                "delete", "failed", performed_by,
+                error_message=str(e)
+            )
+            return False
+    
+    def bulk_delete_iam_policies(self, policy_ids: List[str], performed_by: str) -> Dict[str, Any]:
+        """Bulk delete IAM policies"""
+        results = {
+            "success": [],
+            "failed": [],
+            "total": len(policy_ids)
+        }
+        
+        for policy_id in policy_ids:
+            try:
+                if self.delete_iam_policy(policy_id, performed_by):
+                    results["success"].append(policy_id)
+                else:
+                    results["failed"].append({"id": policy_id, "error": "Deletion failed"})
+            except Exception as e:
+                results["failed"].append({"id": policy_id, "error": str(e)})
+        
+        return results
     
     # ===== Helper Methods =====
     
