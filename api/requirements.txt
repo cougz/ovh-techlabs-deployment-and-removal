@@ -13,7 +13,7 @@ celery==5.3.4
 redis==5.0.1
 python-dotenv==1.0.0
 cryptography==42.0.8
-ovh==1.0.0
+ovh==1.2.0
 backoff==2.2.1
 aiofiles==23.2.1
 websockets==12.0
