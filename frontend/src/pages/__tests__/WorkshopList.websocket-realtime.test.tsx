@@ -225,8 +225,8 @@ describe('WorkshopList - Real-time WebSocket Updates', () => {
 
     // Wait for initial render with 3 workshops
     await waitFor(() => {
-      expect(screen.getByText('Production Workshop')).toBeInTheDocument();
-      expect(screen.getByText('Development Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Main Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Secondary Workshop')).toBeInTheDocument();
       expect(screen.getByText('Training Workshop')).toBeInTheDocument();
     });
 
@@ -244,8 +244,8 @@ describe('WorkshopList - Real-time WebSocket Updates', () => {
     // Workshop should disappear from the list
     await waitFor(() => {
       expect(screen.queryByText('Training Workshop')).not.toBeInTheDocument();
-      expect(screen.getByText('Production Workshop')).toBeInTheDocument();
-      expect(screen.getByText('Development Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Main Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Secondary Workshop')).toBeInTheDocument();
     });
   });
 
@@ -260,7 +260,7 @@ describe('WorkshopList - Real-time WebSocket Updates', () => {
 
     // Wait for initial render
     await waitFor(() => {
-      expect(screen.getByText('Development Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Secondary Workshop')).toBeInTheDocument();
     });
 
     // Verify workshop-2 is deploying

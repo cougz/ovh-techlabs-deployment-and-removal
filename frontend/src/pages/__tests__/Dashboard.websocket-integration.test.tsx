@@ -57,8 +57,8 @@ afterEach(() => {
 const mockWorkshops = [
   {
     id: 'workshop-1',
-    name: 'Production Workshop',
-    description: 'Main production environment',
+    name: 'Main Workshop',
+    description: 'Main workshop environment',
     start_date: '2025-07-25T10:00:00Z',
     end_date: '2025-07-25T18:00:00Z',
     status: 'active' as const,
@@ -69,7 +69,7 @@ const mockWorkshops = [
   },
   {
     id: 'workshop-2',
-    name: 'Development Workshop',
+    name: 'Secondary Workshop',
     description: 'Dev environment',
     start_date: '2025-07-26T10:00:00Z',
     end_date: '2025-07-26T18:00:00Z',
@@ -124,8 +124,8 @@ describe('Dashboard - WebSocket Integration with Workshop Detail', () => {
 
     // Wait for initial render
     await waitFor(() => {
-      expect(screen.getByText('Production Workshop')).toBeInTheDocument();
-      expect(screen.getByText('Development Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Main Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Secondary Workshop')).toBeInTheDocument();
     });
 
     // Verify initial status
@@ -267,7 +267,7 @@ describe('Dashboard - WebSocket Integration with Workshop Detail', () => {
 
     // Wait for initial render
     await waitFor(() => {
-      expect(screen.getByText('Development Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Secondary Workshop')).toBeInTheDocument();
       expect(screen.getByText('Deploying')).toBeInTheDocument();
     });
 

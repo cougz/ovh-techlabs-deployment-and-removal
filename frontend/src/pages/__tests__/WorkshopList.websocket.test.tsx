@@ -18,8 +18,8 @@ jest.mock('react-router-dom', () => ({
 const mockWorkshops = [
   {
     id: 'workshop-1',
-    name: 'Production Workshop',
-    description: 'Main production environment',
+    name: 'Main Workshop',
+    description: 'Main workshop environment',
     start_date: '2025-07-25T10:00:00Z',
     end_date: '2025-07-25T18:00:00Z',
     status: 'active' as const,
@@ -30,7 +30,7 @@ const mockWorkshops = [
   },
   {
     id: 'workshop-2',
-    name: 'Development Workshop',
+    name: 'Secondary Workshop',
     description: 'Dev environment for testing',
     start_date: '2025-07-26T10:00:00Z',
     end_date: '2025-07-26T18:00:00Z',
@@ -81,8 +81,8 @@ describe('WorkshopList - WebSocket Real-time Updates', () => {
     renderComponent();
 
     await waitFor(() => {
-      expect(screen.getByText('Production Workshop')).toBeInTheDocument();
-      expect(screen.getByText('Development Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Main Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Secondary Workshop')).toBeInTheDocument();
       expect(screen.getByText('Training Workshop')).toBeInTheDocument();
     });
 
@@ -100,7 +100,7 @@ describe('WorkshopList - WebSocket Real-time Updates', () => {
     renderComponent();
 
     await waitFor(() => {
-      expect(screen.getByText('Development Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Secondary Workshop')).toBeInTheDocument();
     });
 
     // Initially workshop is 'deploying'
@@ -126,7 +126,7 @@ describe('WorkshopList - WebSocket Real-time Updates', () => {
     renderComponent();
 
     await waitFor(() => {
-      expect(screen.getByText('Production Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Main Workshop')).toBeInTheDocument();
     });
 
     // Check initial attendee count
@@ -200,7 +200,7 @@ describe('WorkshopList - WebSocket Real-time Updates', () => {
     renderComponent();
 
     await waitFor(() => {
-      expect(screen.getByText('Development Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Secondary Workshop')).toBeInTheDocument();
     });
 
     // Check that no progress information updates without WebSocket

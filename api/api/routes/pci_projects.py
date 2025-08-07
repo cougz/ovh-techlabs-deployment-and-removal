@@ -6,6 +6,7 @@ from services.ovh_service_enhanced import enhanced_ovh_service
 from schemas.pci_project import PCIProjectResponse, PCIProjectBulkDeleteRequest, PCIProjectSearchRequest, PCIProjectAuditLog
 from api.websocket import manager
 from core.logging import get_logger
+from core.validation import InputValidator
 
 logger = get_logger(__name__)
 
@@ -24,6 +25,14 @@ async def list_pci_projects(
 ):
     """List all PCI projects with optional filtering"""
     try:
+        # Validate search input if provided
+        if search:
+            search = InputValidator.validate_string_input(search, "search", max_length=100)
+        
+        # Validate state input if provided
+        if state:
+            state = InputValidator.validate_string_input(state, "state", max_length=50)
+        
         projects, from_cache = enhanced_ovh_service.get_all_pci_projects(
             use_cache=use_cache,
             performed_by=current_user
@@ -120,6 +129,9 @@ async def delete_pci_project(
     current_user: str = Depends(get_current_user)
 ):
     """Delete a PCI project"""
+    # Validate service_id to prevent injection
+    service_id = InputValidator.validate_identifier(service_id, "service_id")
+    
     success = enhanced_ovh_service.delete_pci_project(service_id, current_user)
     
     if success:

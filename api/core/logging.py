@@ -37,9 +37,7 @@ def setup_logging():
     
     # Set specific loggers
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("sqlalchemy.engine").setLevel(
-        logging.INFO if settings.DEBUG else logging.WARNING
-    )
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     """Get a structured logger instance."""

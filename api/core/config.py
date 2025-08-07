@@ -30,7 +30,6 @@ class Settings(BaseSettings):
     
     # Application
     SECRET_KEY: str = Field(min_length=32, description="Application secret key")
-    DEBUG: bool = Field(default=False, description="Debug mode")
     CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000"], description="Allowed CORS origins")
     
     @field_validator('SECRET_KEY')
@@ -106,6 +105,10 @@ class Settings(BaseSettings):
     ALLOWED_HOSTS: List[str] = Field(default=["localhost", "127.0.0.1"], description="Allowed hosts")
     INTERNAL_API_KEY: str = Field(default="", description="Internal API key")
     
+    # Admin Authentication (Temporary - should move to database-backed auth)
+    ADMIN_USERNAME: str = Field(default="admin", description="Default admin username")
+    ADMIN_PASSWORD: str = Field(default="admin", description="Default admin password")
+    
     @field_validator('ENCRYPTION_KEY')
     @classmethod
     def validate_encryption_key(cls, v):
@@ -121,8 +124,9 @@ class Settings(BaseSettings):
                 v = secrets.token_urlsafe(32)
         return v
     
+    
     # Logging
-    LOG_LEVEL: str = "DEBUG"
+    LOG_LEVEL: str = "INFO"
     LOG_FILE: Optional[str] = None
     
     # Rate limiting

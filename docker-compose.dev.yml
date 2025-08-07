@@ -47,7 +47,7 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=dev-secret-key-change-in-production
+      - SECRET_KEY=dev-secret-key-12345
       - DEBUG=true
       - CORS_ORIGINS=http://localhost:3000
     ports:
@@ -80,7 +80,7 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=dev-secret-key-change-in-production
+      - SECRET_KEY=dev-secret-key-12345
     volumes:
       - ./api:/app
       - ./terraform:/terraform
@@ -106,7 +106,7 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=dev-secret-key-change-in-production
+      - SECRET_KEY=dev-secret-key-12345
     volumes:
       - ./api:/app
     depends_on:

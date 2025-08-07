@@ -7,6 +7,7 @@ from schemas.pci_project import PCIProjectAuditLog
 from api.websocket import manager
 from core.config import settings
 from core.logging import get_logger
+from core.validation import InputValidator
 
 logger = get_logger(__name__)
 
@@ -42,7 +43,7 @@ async def list_iam_policies(
         logger.error(f"Failed to fetch IAM policies: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while fetching policies" if not settings.DEBUG else f"Failed to fetch IAM policies: {str(e)}"
+            detail=f"Failed to fetch IAM policies: {str(e)}"
         )
 
 @router.get("/filter", response_model=List[IAMPolicyResponse])
@@ -93,7 +94,7 @@ async def filter_iam_policies(
         logger.error(f"Failed to filter IAM policies: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while filtering policies" if not settings.DEBUG else f"Failed to filter IAM policies: {str(e)}"
+            detail=f"Failed to filter IAM policies: {str(e)}"
         )
 
 @router.get("/audit-logs", response_model=List[PCIProjectAuditLog])
@@ -116,6 +117,9 @@ async def delete_iam_policy(
     current_user: str = Depends(get_current_user)
 ):
     """Delete an IAM policy"""
+    # Validate policy_id to prevent injection
+    policy_id = InputValidator.validate_identifier(policy_id, "policy_id")
+    
     success = enhanced_ovh_service.delete_iam_policy(policy_id, current_user)
     
     if success:
@@ -133,7 +137,7 @@ async def delete_iam_policy(
         logger.error(f"Failed to delete IAM policy {policy_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while deleting policy" if not settings.DEBUG else f"Failed to delete IAM policy {policy_id}"
+            detail=f"Failed to delete IAM policy {policy_id}"
         )
 
 @router.post("/bulk-delete")
@@ -202,5 +206,5 @@ async def get_iam_policies_stats(
         logger.error(f"Failed to get statistics: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while getting statistics" if not settings.DEBUG else f"Failed to get statistics: {str(e)}"
+            detail=f"Failed to get statistics: {str(e)}"
         )

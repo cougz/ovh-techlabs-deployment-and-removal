@@ -173,8 +173,8 @@ describe('Dashboard - Real-time WebSocket Updates', () => {
 
     // Wait for initial render
     await waitFor(() => {
-      expect(screen.getByText('Production Workshop')).toBeInTheDocument();
-      expect(screen.getByText('Development Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Main Workshop')).toBeInTheDocument();
+      expect(screen.getByText('Secondary Workshop')).toBeInTheDocument();
     });
 
     // First update: workshop-2 becomes active

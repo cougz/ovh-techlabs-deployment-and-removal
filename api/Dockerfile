@@ -23,7 +23,7 @@ RUN wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Production stage
+# Runtime stage
 FROM python:3.11-slim
 
 WORKDIR /app

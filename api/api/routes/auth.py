@@ -23,9 +23,9 @@ class TokenResponse(BaseModel):
 @router.post("/login", response_model=TokenResponse)
 async def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     """Authenticate user and return access token."""
-    # For now, use simple hardcoded authentication
-    # In production, this would check against a user database
-    if login_data.username == "admin" and login_data.password == "admin":
+    # For now, use configurable authentication via environment variables
+    # TODO: Replace with database-backed user management
+    if login_data.username == settings.ADMIN_USERNAME and login_data.password == settings.ADMIN_PASSWORD:
         access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": login_data.username}, expires_delta=access_token_expires

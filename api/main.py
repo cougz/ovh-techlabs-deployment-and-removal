@@ -72,15 +72,20 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = (
+    # Content Security Policy
+    csp = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: https:; "
-        "font-src 'self'; "
-        "connect-src 'self' ws: wss:; "
-        "frame-ancestors 'none'"
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' localhost:* ws:; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "img-src 'self' data: https: blob:; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "connect-src 'self' ws: wss: localhost:* https:; "
+        "frame-ancestors 'none'; "
+        "object-src 'none'; "
+        "base-uri 'self'"
     )
+    
+    response.headers["Content-Security-Policy"] = csp
     
     # Remove server header if present
     if "server" in response.headers:
@@ -131,6 +136,6 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True if settings.DEBUG else False,
+        reload=False,
         log_level="info"
     )

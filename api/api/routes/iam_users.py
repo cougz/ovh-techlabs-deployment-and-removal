@@ -5,6 +5,7 @@ from services.ovh_service_enhanced import enhanced_ovh_service
 from schemas.iam_user import IAMUserResponse, IAMUserFilterRequest
 from schemas.pci_project import PCIProjectAuditLog
 from api.websocket import manager
+from core.validation import InputValidator
 
 router = APIRouter()
 
@@ -103,6 +104,9 @@ async def delete_iam_user(
     current_user: str = Depends(get_current_user)
 ):
     """Delete an IAM user"""
+    # Validate username to prevent injection
+    username = InputValidator.validate_identifier(username, "username")
+    
     success = enhanced_ovh_service.delete_iam_user(username, current_user)
     
     if success:
@@ -128,11 +132,11 @@ async def bulk_delete_iam_users(
     current_user: str = Depends(get_current_user)
 ):
     """Bulk delete IAM users"""
-    if len(usernames) > 50:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete more than 50 users at once"
-        )
+    # Validate usernames list
+    usernames = InputValidator.validate_list_input(
+        usernames, "usernames", max_items=50, 
+        item_validator=InputValidator.validate_identifier
+    )
     
     results = enhanced_ovh_service.bulk_delete_iam_users(usernames, current_user)
     

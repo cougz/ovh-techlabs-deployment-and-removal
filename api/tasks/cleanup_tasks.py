@@ -274,7 +274,7 @@ def send_cleanup_warnings():
         warning_end = now + timedelta(hours=25)
         
         # Get workshops that need cleanup warnings
-        # Note: In production, this would use cleanup_warning_sent field to avoid duplicates
+        # TODO: Use cleanup_warning_sent field to avoid duplicates
         # For now, we'll send warnings for all qualifying workshops
         workshops_needing_warning = db.query(Workshop).filter(
             Workshop.deletion_scheduled_at >= warning_start,

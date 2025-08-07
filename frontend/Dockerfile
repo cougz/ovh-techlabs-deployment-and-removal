@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 # Copy source code
 COPY . .
@@ -15,7 +15,7 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Production stage
+# Runtime stage
 FROM nginx:alpine
 
 # Copy built assets from builder stage

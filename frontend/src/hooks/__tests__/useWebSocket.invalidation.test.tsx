@@ -201,7 +201,7 @@ describe('useWebSocket - Query Invalidation Fix', () => {
     
     // Simulate WorkshopDetail page establishing WebSocket
     renderHook(() => useWebSocket({ 
-      workshopId: 'production-workshop',
+      workshopId: 'main-workshop',
       onStatusUpdate 
     }), { wrapper });
 
@@ -212,7 +212,7 @@ describe('useWebSocket - Query Invalidation Fix', () => {
 
     // Simulate Dashboard query being active
     queryClient.setQueryData('workshops', [
-      { id: 'production-workshop', status: 'deploying', active_attendees: 0 }
+      { id: 'main-workshop', status: 'deploying', active_attendees: 0 }
     ]);
 
     invalidateQueriesSpy.mockClear();
@@ -221,7 +221,7 @@ describe('useWebSocket - Query Invalidation Fix', () => {
     const completionMessage = {
       type: 'status_update',
       entity_type: 'workshop',
-      entity_id: 'production-workshop',
+      entity_id: 'main-workshop',
       status: 'active',
       details: { message: 'All attendees deployed successfully' }
     };
@@ -238,7 +238,7 @@ describe('useWebSocket - Query Invalidation Fix', () => {
     // Status update callback should be called
     expect(onStatusUpdate).toHaveBeenCalledWith(
       'workshop', 
-      'production-workshop', 
+      'main-workshop', 
       'active', 
       { message: 'All attendees deployed successfully' }
     );

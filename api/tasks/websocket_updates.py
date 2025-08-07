@@ -14,7 +14,7 @@ def send_websocket_update(workshop_id: str, message: dict):
     This sends an HTTP request to the API to trigger the WebSocket broadcast.
     """
     try:
-        # In production, we'd use a proper message queue (Redis pub/sub)
+        # TODO: Consider using a proper message queue (Redis pub/sub)
         # For now, we'll use a simple HTTP callback
         url = f"http://ovh-techlabs-api:8000/internal/broadcast"
         payload = {
