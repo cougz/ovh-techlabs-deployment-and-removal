@@ -2,24 +2,47 @@
 
 # Docker Compose Rebuild Script
 # This script rebuilds the stack while preserving data volumes for migration safety
-# Usage: ./rebuild.sh [--reset-data]
+# Usage: ./rebuild.sh [--reset-data] [--local]
 #   --reset-data: Remove all volumes (destructive, use with caution)
+#   --local: Skip git pull and rebuild using local changes only
 
 set -e  # Exit on any error
 
 RESET_DATA=false
-if [[ "$1" == "--reset-data" ]]; then
-    RESET_DATA=true
+LOCAL_REBUILD=false
+
+# Parse command line arguments
+for arg in "$@"; do
+    case $arg in
+        --reset-data)
+            RESET_DATA=true
+            ;;
+        --local)
+            LOCAL_REBUILD=true
+            ;;
+    esac
+done
+
+if [[ "$RESET_DATA" == "true" ]]; then
     echo "⚠️  WARNING: Data reset mode enabled - all volumes will be removed!"
-    echo "🔄 Starting Docker Compose rebuild process (DESTRUCTIVE)..."
+fi
+
+if [[ "$LOCAL_REBUILD" == "true" ]]; then
+    echo "🔄 Starting Docker Compose rebuild process (LOCAL)..."
+    echo "🏠 Using local changes without git pull"
 else
-    echo "🔄 Starting Docker Compose rebuild process (data-safe)..."
+    echo "🔄 Starting Docker Compose rebuild process..."
+    echo "💡 Tip: Use './rebuild.sh --local' to skip git pull and use local changes"
     echo "💡 Tip: Use './rebuild.sh --reset-data' to reset all data volumes if needed"
 fi
 
-# Step 0: Pull latest changes from git in current directory
-echo "📥 Pulling latest changes from git..."
-git pull
+# Step 0: Pull latest changes from git (unless local mode)
+if [[ "$LOCAL_REBUILD" == "false" ]]; then
+    echo "📥 Pulling latest changes from git..."
+    git pull
+else
+    echo "🏠 Skipping git pull - using local changes"
+fi
 
 # Step 1: Check if we're in the root directory with docker-compose files
 if [ ! -f "docker-compose.yml" ]; then
@@ -68,6 +91,10 @@ if [[ "$RESET_DATA" == "true" ]]; then
 else
     echo "✅ Docker Compose rebuild completed with data preservation!"
     echo "🔒 All database and application data has been preserved for safe migration"
+fi
+
+if [[ "$LOCAL_REBUILD" == "true" ]]; then
+    echo "🏠 Rebuild used local changes without git pull"
 fi
 echo "📊 Current running containers:"
 sudo docker compose ps

@@ -8,7 +8,9 @@ from typing import Optional
 from core.config import settings
 from core.database import engine, Base
 from core.celery_app import celery_app
-from api.routes import workshops, attendees, deployments, auth, health, internal, config_routes, templates
+# Import all models to ensure they're registered with SQLAlchemy
+import models
+from api.routes import workshops, attendees, deployments, auth, health, internal, config_routes, templates, pci_projects, iam_users, iam_policies
 from api.websocket import websocket_endpoint, global_websocket_endpoint, manager
 from core.logging import setup_logging
 
@@ -58,6 +60,9 @@ app.include_router(attendees.router, prefix="/api/attendees", tags=["attendees"]
 app.include_router(deployments.router, prefix="/api/deployments", tags=["deployments"])
 app.include_router(config_routes.router, prefix="/api/settings", tags=["settings"])
 app.include_router(templates.router, prefix="/api/templates", tags=["templates"])
+app.include_router(pci_projects.router, prefix="/api/pci-projects", tags=["pci-projects"])
+app.include_router(iam_users.router, prefix="/api/iam-users", tags=["iam-users"])
+app.include_router(iam_policies.router, prefix="/api/iam-policies", tags=["iam-policies"])
 app.include_router(internal.router, prefix="/internal", tags=["internal"])
 
 # Root endpoint

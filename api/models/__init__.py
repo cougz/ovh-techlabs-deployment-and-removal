@@ -4,6 +4,7 @@ from .deployment_log import DeploymentLog
 from .credential import Credential
 from .workshop_template import WorkshopTemplate
 from .audit_log import AuditLog
+from .ovh_resource_audit import OVHResourceAudit, OVHResourceCache
 
 __all__ = [
     "Workshop",
@@ -11,5 +12,7 @@ __all__ = [
     "DeploymentLog",
     "Credential",
     "WorkshopTemplate",
-    "AuditLog"
+    "AuditLog",
+    "OVHResourceAudit",
+    "OVHResourceCache"
 ]
