@@ -574,43 +574,13 @@ def destroy_attendee_resources(self, attendee_id: str):
         deployment_log.status = "running"
         db.commit()
         
-        # Find the correct batch workspace for this attendee
-        # First get all attendees in the workshop to determine batch position
-        workshop_attendees = db.query(Attendee).filter(
-            Attendee.workshop_id == attendee.workshop_id
-        ).order_by(Attendee.created_at).all()
-        
-        # Find this attendee's position in the ordered list
-        attendee_position = None
-        for i, workshop_attendee in enumerate(workshop_attendees):
-            if workshop_attendee.id == attendee.id:
-                attendee_position = i
-                break
-        
-        if attendee_position is None:
-            raise Exception(f"Could not determine batch position for attendee {attendee_id}")
-        
-        # Calculate batch number (1-indexed) and position within batch (0-indexed)
-        batch_size = 3
-        batch_number = attendee_position // batch_size + 1
-        position_in_batch = attendee_position % batch_size
-        
-        # Construct the batch workspace name
-        batch_workspace_name = f"workshop-{attendee.workshop_id}-batch-{batch_number}"
-        
-        logger.info(f"Destroying terraform resources for attendee {attendee_id} from batch workspace {batch_workspace_name} (position {position_in_batch} in batch)")
-        
-        # Use targeted destroy to only destroy resources for this specific attendee
-        target_resources = [
-            f"ovh_cloud_project.project_{position_in_batch}",
-            f"ovh_me_identity_user.user_{position_in_batch}",
-            f"ovh_iam_policy.policy_{position_in_batch}"
-        ]
+        # Destroy terraform resources with individual workspace
+        workspace_name = f"attendee-{attendee_id}"
+        logger.info(f"Destroying terraform resources for attendee {attendee_id}")
         
         success, destroy_output = terraform_service.destroy_with_retry(
-            batch_workspace_name, 
-            max_retries=2,
-            target_resources=target_resources
+            workspace_name, 
+            max_retries=2
         )
         if not success:
             # Check if this is a retryable error at the task level
@@ -620,8 +590,8 @@ def destroy_attendee_resources(self, attendee_id: str):
             else:
                 raise Exception(f"Terraform destroy failed after all retries: {destroy_output}")
         
-        # Note: Don't clean up the batch workspace since other attendees might still be using it
-        # The workspace will be cleaned up when the entire workshop is deleted
+        # Clean up terraform workspace
+        terraform_service.cleanup_workspace(workspace_name)
         
         # Update attendee
         attendee.status = "deleted"
@@ -704,7 +674,7 @@ def health_check_resources():
 
 @celery_app.task(bind=True, soft_time_limit=3*60*60, time_limit=4*60*60)  # 3 hours soft, 4 hours hard
 def deploy_workshop_attendees_sequential(self, workshop_id: str):
-    """Deploy all attendees in a workshop sequentially in batches of 3 to avoid OVH cart limitations."""
+    """Deploy all attendees in a workshop sequentially with 5-minute pauses every 3 attendees to avoid OVH cart limitations."""
     db = SessionLocal()
     
     try:
@@ -721,63 +691,60 @@ def deploy_workshop_attendees_sequential(self, workshop_id: str):
             db.commit()
             return {"message": "No attendees to deploy", "attendees_deployed": 0}
         
-        logger.info(f"Starting batched deployment of {len(attendees)} attendees for workshop {workshop_id}")
+        logger.info(f"Starting sequential deployment of {len(attendees)} attendees for workshop {workshop_id}")
         
         deployed_count = 0
         failed_count = 0
         
-        # Process attendees in batches of 3 (OVH cart limitation)
-        batch_size = 3
-        for batch_idx in range(0, len(attendees), batch_size):
-            batch = attendees[batch_idx:batch_idx + batch_size]
-            logger.info(f"Processing batch {batch_idx//batch_size + 1} with {len(batch)} attendees")
+        for i, attendee in enumerate(attendees):
+            logger.info(f"Deploying attendee {i+1}/{len(attendees)}: {attendee.username}")
             
-            # Deploy batch of attendees together
-            batch_result = None
-            batch_success = False
+            # Update task progress
+            self.update_state(
+                state='PROGRESS',
+                meta={
+                    'current': i + 1,
+                    'total': len(attendees),
+                    'status': f'Deploying {attendee.username}',
+                    'attendee_id': str(attendee.id)
+                }
+            )
+            
+            # Broadcast workshop deployment progress
+            broadcast_deployment_progress(
+                str(workshop_id),
+                i + 1,
+                len(attendees),
+                f"Deploying {attendee.username}..."
+            )
+            
             try:
-                batch_result = deploy_attendee_batch.apply(args=[workshop_id, [str(a.id) for a in batch], batch_idx//batch_size])
-                batch_success = batch_result.successful()
+                # Call the individual attendee deployment task synchronously
+                result = deploy_attendee_resources.apply(args=[str(attendee.id)])
+                
+                if result.successful() and not result.result.get('error'):
+                    deployed_count += 1
+                    logger.info(f"Successfully deployed {attendee.username}")
+                else:
+                    failed_count += 1
+                    error_msg = result.result.get('error', 'Unknown error')
+                    logger.error(f"Failed to deploy {attendee.username}: {error_msg}")
+                    
+                    # If deployment fails, mark attendee as failed and continue with next
+                    attendee.status = 'failed'
+                    db.commit()
                     
             except Exception as e:
-                logger.error(f"Exception during batch deployment: {str(e)}")
-                batch_success = False
-                
-            # Process batch results regardless of exceptions (including SoftTimeLimitExceeded)
-            if batch_success and batch_result:
-                result = batch_result.result
-                deployed_count += result.get('deployed_count', 0)
-                failed_count += result.get('failed_count', 0)
-                
-                # Update attendee statuses based on batch result
-                for attendee_id, status in result.get('attendee_statuses', {}).items():
-                    att = db.query(Attendee).filter(Attendee.id == UUID(attendee_id)).first()
-                    if att:
-                        att.status = status
-                        if status == 'active' and 'attendee_outputs' in result:
-                            outputs = result['attendee_outputs'].get(attendee_id, {})
-                            if 'project_id' in outputs:
-                                att.ovh_project_id = outputs['project_id']
-                            if 'user_urn' in outputs:
-                                att.ovh_user_urn = outputs['user_urn']
-                db.commit()
-            else:
-                # If batch fails, mark all attendees in batch as failed
-                for attendee in batch:
-                    attendee.status = 'failed'
-                    failed_count += 1
+                failed_count += 1
+                logger.error(f"Exception during deployment of {attendee.username}: {str(e)}")
+                attendee.status = 'failed'
                 db.commit()
                 
-            # Add cooldown between batches (5 minutes as per example)
-            # Check if this is NOT the last batch
-            next_batch_start = batch_idx + batch_size
-            if next_batch_start < len(attendees):
-                status_msg = "complete" if batch_success else "failed"
-                logger.info(f"Waiting 5 minutes before next batch to avoid API rate limits (batch {batch_idx//batch_size + 1} {status_msg}, {len(attendees) - next_batch_start} attendees remaining)")
+            # Add cooldown every 3 attendees (OVH cart limitation - 5 minutes between carts)
+            if (i + 1) % 3 == 0 and (i + 1) < len(attendees):
+                logger.info(f"Waiting 5 minutes after deploying {i + 1} attendees to avoid OVH API rate limits ({len(attendees) - (i + 1)} attendees remaining)")
                 import time
                 time.sleep(300)  # 5 minutes cooldown
-            else:
-                logger.info(f"Final batch {batch_idx//batch_size + 1} complete - no cooldown needed")
         
         # Update workshop status based on deployment results
         # Since we're completing a deployment lifecycle, we need to explicitly set the status
