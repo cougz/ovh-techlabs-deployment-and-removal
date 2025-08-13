@@ -16,7 +16,7 @@ import { getEffectiveStatus, sortByStatusPriority } from '../utils/statusUtils';
 import { useWebSocket } from '../contexts/WebSocketContext';
 
 const Dashboard: React.FC = () => {
-  const { isConnected, connectionError } = useWebSocket();
+  useWebSocket(); // Initialize WebSocket connection
 
   const { data: workshops = [], isLoading } = useQuery<WorkshopSummary[]>(
     'workshops',

@@ -33,7 +33,7 @@ const WorkshopList: React.FC = () => {
   const [showActions, setShowActions] = useState<string | null>(null);
   const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
-  const { isConnected, connectionError } = useWebSocket();
+  useWebSocket(); // Initialize WebSocket connection
 
   const { data: workshops = [], isLoading, error, refetch } = useQuery<WorkshopSummary[]>(
     ['workshops', statusFilter],
