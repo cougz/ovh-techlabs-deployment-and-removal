@@ -161,16 +161,23 @@ async def get_attendee_credentials(
     # Get batch outputs
     batch_outputs = terraform_service.get_batch_outputs(batch_workspace_name, batch_size)
     
-    if not batch_outputs or len(batch_outputs) <= position_in_batch:
+    if not batch_outputs:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Terraform outputs not available for this attendee"
         )
     
     # Extract OVH IAM credentials from the attendee's position in batch outputs
-    attendee_outputs = batch_outputs[position_in_batch]
-    ovh_username = attendee_outputs.get("username", {}).get("value")
-    ovh_password = attendee_outputs.get("password", {}).get("value")
+    attendee_key = f"attendee_{position_in_batch}"
+    if attendee_key not in batch_outputs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No credentials found for attendee position {position_in_batch}"
+        )
+    
+    attendee_outputs = batch_outputs[attendee_key]
+    ovh_username = attendee_outputs.get("username")
+    ovh_password = attendee_outputs.get("password")
     
     if not ovh_username or not ovh_password:
         raise HTTPException(
