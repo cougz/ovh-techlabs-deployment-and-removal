@@ -661,6 +661,9 @@ terraform {
     ovh = {
       source = "ovh/ovh"
     }
+    random = {
+      source = "hashicorp/random"
+    }
   }
 }
 
@@ -707,10 +710,18 @@ data "ovh_order_cart_product_plan" "cloud" {
   plan_code      = "project.2018"
 }
 
+# Generate a unique project name with random suffix
+resource "random_string" "project_suffix" {
+  length  = 8
+  upper   = false
+  special = false
+}
+
 # Create OVH Public Cloud Project
 resource "ovh_cloud_project" "workshop_project" {
   ovh_subsidiary = data.ovh_order_cart.mycart.ovh_subsidiary
   description    = var.project_description
+  project_name   = "${local.sanitized_username}-${random_string.project_suffix.result}"
 
   plan {
     duration     = data.ovh_order_cart_product_plan.cloud.selected_price.0.duration
