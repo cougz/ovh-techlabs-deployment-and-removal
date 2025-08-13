@@ -309,16 +309,25 @@ class TerraformService:
             # Not a stale state error, return original failure
             return False, output, False
     
-    def destroy(self, workspace_name: str) -> Tuple[bool, str]:
-        """Run terraform destroy with shorter timeout."""
+    def destroy(self, workspace_name: str, target_resources: List[str] = None) -> Tuple[bool, str]:
+        """Run terraform destroy with shorter timeout and optional resource targeting."""
         workspace_path = self._get_workspace_path(workspace_name)
         
         if not workspace_path.exists():
             return False, "Workspace does not exist"
         
+        # Build terraform command with optional target resources
+        command = ["destroy", "-auto-approve", "-parallelism=1"]
+        
+        # Add target flags for specific resources
+        if target_resources:
+            for resource in target_resources:
+                command.extend(["-target", resource])
+            logger.info(f"Targeting specific resources for destruction: {target_resources}", workspace=workspace_name)
+        
         # Use shorter timeout for destroy operations (10 minutes instead of 30)
         return_code, stdout, stderr = self._run_terraform_command(
-            ["destroy", "-auto-approve", "-parallelism=1"], 
+            command, 
             workspace_path,
             timeout=600  # 10 minutes timeout
         )
@@ -333,7 +342,7 @@ class TerraformService:
         
         return success, output
     
-    def destroy_with_retry(self, workspace_name: str, max_retries: int = 2) -> Tuple[bool, str]:
+    def destroy_with_retry(self, workspace_name: str, max_retries: int = 2, target_resources: List[str] = None) -> Tuple[bool, str]:
         """Run terraform destroy with retry mechanism for handling timeouts."""
         last_error = ""
         
@@ -341,7 +350,7 @@ class TerraformService:
             if attempt > 0:
                 logger.info(f"Retrying terraform destroy for workspace {workspace_name}, attempt {attempt + 1}/{max_retries + 1}")
             
-            success, output = self.destroy(workspace_name)
+            success, output = self.destroy(workspace_name, target_resources)
             
             if success:
                 if attempt > 0:

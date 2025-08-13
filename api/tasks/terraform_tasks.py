@@ -574,12 +574,44 @@ def destroy_attendee_resources(self, attendee_id: str):
         deployment_log.status = "running"
         db.commit()
         
-        # Destroy terraform resources with retry mechanism
-        workspace_name = f"attendee-{attendee_id}"
+        # Find the correct batch workspace for this attendee
+        # First get all attendees in the workshop to determine batch position
+        workshop_attendees = db.query(Attendee).filter(
+            Attendee.workshop_id == attendee.workshop_id
+        ).order_by(Attendee.created_at).all()
         
-        logger.info(f"Destroying terraform resources for attendee {attendee_id} with retry mechanism")
+        # Find this attendee's position in the ordered list
+        attendee_position = None
+        for i, workshop_attendee in enumerate(workshop_attendees):
+            if workshop_attendee.id == attendee.id:
+                attendee_position = i
+                break
         
-        success, destroy_output = terraform_service.destroy_with_retry(workspace_name, max_retries=2)
+        if attendee_position is None:
+            raise Exception(f"Could not determine batch position for attendee {attendee_id}")
+        
+        # Calculate batch number (1-indexed) and position within batch (0-indexed)
+        batch_size = 3
+        batch_number = attendee_position // batch_size + 1
+        position_in_batch = attendee_position % batch_size
+        
+        # Construct the batch workspace name
+        batch_workspace_name = f"workshop-{attendee.workshop_id}-batch-{batch_number}"
+        
+        logger.info(f"Destroying terraform resources for attendee {attendee_id} from batch workspace {batch_workspace_name} (position {position_in_batch} in batch)")
+        
+        # Use targeted destroy to only destroy resources for this specific attendee
+        target_resources = [
+            f"ovh_cloud_project.project_{position_in_batch}",
+            f"ovh_me_identity_user.user_{position_in_batch}",
+            f"ovh_iam_policy.policy_{position_in_batch}"
+        ]
+        
+        success, destroy_output = terraform_service.destroy_with_retry(
+            batch_workspace_name, 
+            max_retries=2,
+            target_resources=target_resources
+        )
         if not success:
             # Check if this is a retryable error at the task level
             if terraform_service._is_retryable_error(destroy_output) and self.request.retries < 2:
@@ -588,8 +620,8 @@ def destroy_attendee_resources(self, attendee_id: str):
             else:
                 raise Exception(f"Terraform destroy failed after all retries: {destroy_output}")
         
-        # Clean up workspace
-        terraform_service.cleanup_workspace(workspace_name)
+        # Note: Don't clean up the batch workspace since other attendees might still be using it
+        # The workspace will be cleaned up when the entire workshop is deleted
         
         # Update attendee
         attendee.status = "deleted"
