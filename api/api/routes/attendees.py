@@ -140,20 +140,58 @@ async def get_attendee_credentials(
     
     # Get Terraform outputs for OVH IAM user credentials
     from services.terraform_service import terraform_service
+    
+    # First try individual workspace (new approach)
     workspace_name = f"attendee-{attendee_id}"
     outputs = terraform_service.get_outputs(workspace_name)
     
-    if not outputs:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Terraform outputs not available"
-        )
+    ovh_username = None
+    ovh_password = None
     
-    # Extract OVH IAM credentials from Terraform outputs
-    ovh_username = outputs.get("username", {}).get("value")
-    ovh_password = outputs.get("password", {}).get("value")
+    if outputs:
+        logger.info(f"Found individual workspace for attendee: {attendee_id}")
+        # Extract OVH IAM credentials from individual workspace outputs
+        ovh_username = outputs.get("username", {}).get("value")
+        ovh_password = outputs.get("password", {}).get("value")
+    else:
+        logger.info(f"No individual workspace found, trying batch workspace approach for attendee: {attendee_id}")
+        # Fall back to batch workspace approach (for currently deployed attendees)
+        try:
+            # Find attendee position in workshop for batch workspace
+            workshop_attendees = db.query(Attendee).filter(
+                Attendee.workshop_id == attendee.workshop_id
+            ).order_by(Attendee.id).all()
+            
+            attendee_position = None
+            for i, wa in enumerate(workshop_attendees):
+                if wa.id == attendee.id:
+                    attendee_position = i
+                    break
+            
+            if attendee_position is not None:
+                # Calculate batch number and position
+                batch_size = 3
+                batch_number = attendee_position // batch_size + 1
+                position_in_batch = attendee_position % batch_size
+                batch_workspace_name = f"workshop-{attendee.workshop_id}-batch-{batch_number}"
+                
+                logger.info(f"Trying batch workspace: {batch_workspace_name}, position: {position_in_batch}")
+                
+                # Get batch outputs
+                batch_outputs = terraform_service.get_batch_outputs(batch_workspace_name, batch_size)
+                
+                if batch_outputs:
+                    attendee_key = f"attendee_{position_in_batch}"
+                    if attendee_key in batch_outputs:
+                        attendee_outputs = batch_outputs[attendee_key]
+                        ovh_username = attendee_outputs.get("username")
+                        ovh_password = attendee_outputs.get("password")
+                        logger.info(f"Found credentials in batch workspace for attendee: {attendee_id}")
+        except Exception as e:
+            logger.error(f"Error trying batch workspace approach: {str(e)}")
     
     if not ovh_username or not ovh_password:
+        logger.error(f"No credentials found for attendee {attendee_id} in either individual or batch workspaces")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="OVH IAM credentials not found in Terraform outputs"
