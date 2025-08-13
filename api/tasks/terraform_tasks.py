@@ -701,49 +701,51 @@ def deploy_workshop_attendees_sequential(self, workshop_id: str):
             logger.info(f"Processing batch {batch_idx//batch_size + 1} with {len(batch)} attendees")
             
             # Deploy batch of attendees together
+            batch_result = None
+            batch_success = False
             try:
                 batch_result = deploy_attendee_batch.apply(args=[workshop_id, [str(a.id) for a in batch], batch_idx//batch_size])
-                
-                if batch_result.successful():
-                    result = batch_result.result
-                    deployed_count += result.get('deployed_count', 0)
-                    failed_count += result.get('failed_count', 0)
-                    
-                    # Update attendee statuses based on batch result
-                    for attendee_id, status in result.get('attendee_statuses', {}).items():
-                        att = db.query(Attendee).filter(Attendee.id == UUID(attendee_id)).first()
-                        if att:
-                            att.status = status
-                            if status == 'active' and 'attendee_outputs' in result:
-                                outputs = result['attendee_outputs'].get(attendee_id, {})
-                                if 'project_id' in outputs:
-                                    att.ovh_project_id = outputs['project_id']
-                                if 'user_urn' in outputs:
-                                    att.ovh_user_urn = outputs['user_urn']
-                    db.commit()
-                else:
-                    # If batch fails, mark all attendees in batch as failed
-                    for attendee in batch:
-                        attendee.status = 'failed'
-                        failed_count += 1
-                    db.commit()
-                    
-                # Add cooldown between batches (5 minutes as per example)
-                # Check if this is NOT the last batch
-                next_batch_start = batch_idx + batch_size
-                if next_batch_start < len(attendees):
-                    logger.info(f"Waiting 5 minutes before next batch to avoid API rate limits (batch {batch_idx//batch_size + 1} complete, {len(attendees) - next_batch_start} attendees remaining)")
-                    import time
-                    time.sleep(300)  # 5 minutes cooldown
-                else:
-                    logger.info(f"Final batch {batch_idx//batch_size + 1} complete - no cooldown needed")
+                batch_success = batch_result.successful()
                     
             except Exception as e:
                 logger.error(f"Exception during batch deployment: {str(e)}")
+                batch_success = False
+                
+            # Process batch results regardless of exceptions (including SoftTimeLimitExceeded)
+            if batch_success and batch_result:
+                result = batch_result.result
+                deployed_count += result.get('deployed_count', 0)
+                failed_count += result.get('failed_count', 0)
+                
+                # Update attendee statuses based on batch result
+                for attendee_id, status in result.get('attendee_statuses', {}).items():
+                    att = db.query(Attendee).filter(Attendee.id == UUID(attendee_id)).first()
+                    if att:
+                        att.status = status
+                        if status == 'active' and 'attendee_outputs' in result:
+                            outputs = result['attendee_outputs'].get(attendee_id, {})
+                            if 'project_id' in outputs:
+                                att.ovh_project_id = outputs['project_id']
+                            if 'user_urn' in outputs:
+                                att.ovh_user_urn = outputs['user_urn']
+                db.commit()
+            else:
+                # If batch fails, mark all attendees in batch as failed
                 for attendee in batch:
                     attendee.status = 'failed'
                     failed_count += 1
                 db.commit()
+                
+            # Add cooldown between batches (5 minutes as per example)
+            # Check if this is NOT the last batch
+            next_batch_start = batch_idx + batch_size
+            if next_batch_start < len(attendees):
+                status_msg = "complete" if batch_success else "failed"
+                logger.info(f"Waiting 5 minutes before next batch to avoid API rate limits (batch {batch_idx//batch_size + 1} {status_msg}, {len(attendees) - next_batch_start} attendees remaining)")
+                import time
+                time.sleep(300)  # 5 minutes cooldown
+            else:
+                logger.info(f"Final batch {batch_idx//batch_size + 1} complete - no cooldown needed")
         
         # Update workshop status based on deployment results
         # Since we're completing a deployment lifecycle, we need to explicitly set the status

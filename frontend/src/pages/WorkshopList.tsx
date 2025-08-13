@@ -25,7 +25,7 @@ import {
   needsCleanup,
   sortByStatusPriority 
 } from '../utils/statusUtils';
-import { useGlobalWebSocket } from '../hooks/useGlobalWebSocket';
+import { useWebSocket } from '../contexts/WebSocketContext';
 
 const WorkshopList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -33,12 +33,7 @@ const WorkshopList: React.FC = () => {
   const [showActions, setShowActions] = useState<string | null>(null);
   const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
-  // Enable global WebSocket for real-time updates
-  useGlobalWebSocket({
-    onStatusUpdate: (workshopId, entityType, entityId, status) => {
-      console.log(`WorkshopList: WebSocket status update - ${entityType} ${entityId} in workshop ${workshopId}: ${status}`);
-    }
-  });
+  const { isConnected, connectionError } = useWebSocket();
 
   const { data: workshops = [], isLoading, error, refetch } = useQuery<WorkshopSummary[]>(
     ['workshops', statusFilter],

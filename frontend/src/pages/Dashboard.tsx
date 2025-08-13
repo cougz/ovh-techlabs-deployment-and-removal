@@ -13,15 +13,10 @@ import { workshopApi } from '../services/api';
 import { WorkshopSummary } from '../types';
 import StatusIndicator from '../components/StatusIndicator';
 import { getEffectiveStatus, sortByStatusPriority } from '../utils/statusUtils';
-import { useGlobalWebSocket } from '../hooks/useGlobalWebSocket';
+import { useWebSocket } from '../contexts/WebSocketContext';
 
 const Dashboard: React.FC = () => {
-  // Enable global WebSocket for real-time updates
-  useGlobalWebSocket({
-    onStatusUpdate: (workshopId, entityType, entityId, status) => {
-      console.log(`Dashboard: WebSocket status update - ${entityType} ${entityId} in workshop ${workshopId}: ${status}`);
-    }
-  });
+  const { isConnected, connectionError } = useWebSocket();
 
   const { data: workshops = [], isLoading } = useQuery<WorkshopSummary[]>(
     'workshops',

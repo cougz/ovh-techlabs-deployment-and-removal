@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from 'react-query';
 import { Toaster } from 'react-hot-toast';
 
 import { store } from './store';
+import { WebSocketProvider } from './contexts/WebSocketContext';
 import App from './App';
 import './index.css';
 
@@ -28,25 +29,27 @@ root.render(
   <React.StrictMode>
     <Provider store={store}>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <App />
-          <Toaster 
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: '#363636',
-                color: '#fff',
-              },
-              success: {
-                duration: 3000,
-              },
-              error: {
-                duration: 5000,
-              },
-            }}
-          />
-        </BrowserRouter>
+        <WebSocketProvider>
+          <BrowserRouter>
+            <App />
+            <Toaster 
+              position="top-right"
+              toastOptions={{
+                duration: 4000,
+                style: {
+                  background: '#363636',
+                  color: '#fff',
+                },
+                success: {
+                  duration: 3000,
+                },
+                error: {
+                  duration: 5000,
+                },
+              }}
+            />
+          </BrowserRouter>
+        </WebSocketProvider>
       </QueryClientProvider>
     </Provider>
   </React.StrictMode>
