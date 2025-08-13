@@ -130,20 +130,47 @@ async def get_attendee_credentials(
             detail="No credentials available - attendee not deployed"
         )
     
-    # Get Terraform outputs for OVH IAM user credentials
+    # Get Terraform outputs from batch workspace for OVH IAM user credentials
     from services.terraform_service import terraform_service
-    workspace_name = f"attendee-{attendee_id}"
-    outputs = terraform_service.get_outputs(workspace_name)
     
-    if not outputs:
+    # Find the correct batch workspace for this attendee
+    # First get all attendees in the workshop to determine batch position
+    workshop_attendees = db.query(Attendee).filter(
+        Attendee.workshop_id == attendee.workshop_id
+    ).order_by(Attendee.id).all()
+    
+    # Find this attendee's position in the ordered list
+    attendee_position = None
+    for i, wa in enumerate(workshop_attendees):
+        if wa.id == attendee.id:
+            attendee_position = i
+            break
+    
+    if attendee_position is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Terraform outputs not available"
+            detail="Could not determine attendee position"
         )
     
-    # Extract OVH IAM credentials from Terraform outputs
-    ovh_username = outputs.get("username", {}).get("value")
-    ovh_password = outputs.get("password", {}).get("value")
+    # Calculate batch number and position
+    batch_size = 3
+    batch_number = attendee_position // batch_size + 1
+    position_in_batch = attendee_position % batch_size
+    batch_workspace_name = f"workshop-{attendee.workshop_id}-batch-{batch_number}"
+    
+    # Get batch outputs
+    batch_outputs = terraform_service.get_batch_outputs(batch_workspace_name, batch_size)
+    
+    if not batch_outputs or len(batch_outputs) <= position_in_batch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Terraform outputs not available for this attendee"
+        )
+    
+    # Extract OVH IAM credentials from the attendee's position in batch outputs
+    attendee_outputs = batch_outputs[position_in_batch]
+    ovh_username = attendee_outputs.get("username", {}).get("value")
+    ovh_password = attendee_outputs.get("password", {}).get("value")
     
     if not ovh_username or not ovh_password:
         raise HTTPException(
