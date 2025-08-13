@@ -99,11 +99,11 @@ class InputValidator:
                 detail=f"{field_name} cannot be empty"
             )
         
-        # Only allow alphanumeric, hyphens, underscores
-        if not re.match(r"^[a-zA-Z0-9\-_]+$", value):
+        # Only allow alphanumeric, hyphens, underscores, and periods
+        if not re.match(r"^[a-zA-Z0-9\-_.]+$", value):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"{field_name} can only contain letters, numbers, hyphens, and underscores"
+                detail=f"{field_name} can only contain letters, numbers, hyphens, underscores, and periods"
             )
         
         if len(value) > 100:
