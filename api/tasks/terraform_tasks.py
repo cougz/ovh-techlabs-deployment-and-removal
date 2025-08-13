@@ -52,6 +52,7 @@ def update_workshop_status_based_on_attendees(db: Session, workshop_id: UUID):
 def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_number: int):
     """Deploy a batch of up to 3 attendees using a single OVH cart."""
     db = SessionLocal()
+    deployment_logs = {}  # Initialize early to avoid UnboundLocalError
     
     try:
         # Get all attendees in the batch
@@ -84,14 +85,37 @@ def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_numb
             ]
         }
         
-        # Broadcast batch deployment start
+        # Update attendees to deploying status and create deployment logs
         for attendee in attendees:
+            # Create deployment log for each attendee
+            deployment_log = DeploymentLog(
+                attendee_id=attendee.id,
+                action="deploy",
+                status="started"
+            )
+            db.add(deployment_log)
+            deployment_logs[str(attendee.id)] = deployment_log
+            
+            # Update attendee status to deploying
+            attendee.status = "deploying"
+            
+            # Broadcast status update
             broadcast_status_update(
                 str(workshop_id),
                 "attendee",
                 str(attendee.id),
                 "deploying"
             )
+            
+            # Broadcast deployment log
+            broadcast_deployment_log(
+                str(workshop_id),
+                str(attendee.id),
+                "deploy",
+                "started"
+            )
+        
+        db.commit()
         
         # Create terraform workspace with batch configuration
         if not terraform_service.create_batch_workspace(workspace_name, batch_config):
@@ -99,15 +123,57 @@ def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_numb
         
         # Plan deployment
         logger.info(f"Planning batch deployment {batch_number}")
+        
+        # Update deployment logs to running and broadcast progress
+        for attendee in attendees:
+            deployment_logs[str(attendee.id)].status = "running"
+            broadcast_deployment_progress(
+                str(workshop_id),
+                str(attendee.id),
+                40,
+                "Planning infrastructure"
+            )
+        db.commit()
+        
         success, plan_output = terraform_service.plan(workspace_name)
         if not success:
             raise Exception(f"Batch terraform plan failed: {plan_output}")
         
+        # Broadcast plan completion
+        for attendee in attendees:
+            broadcast_deployment_log(
+                str(workshop_id),
+                str(attendee.id),
+                "plan",
+                "completed",
+                plan_output
+            )
+        
         # Apply deployment
         logger.info(f"Applying batch deployment {batch_number}")
+        
+        # Update progress for apply phase
+        for attendee in attendees:
+            broadcast_deployment_progress(
+                str(workshop_id),
+                str(attendee.id),
+                70,
+                "Creating OVH resources"
+            )
+        
         success, apply_output, recovered = terraform_service.apply_with_recovery(workspace_name, batch_config)
         if not success:
             raise Exception(f"Batch terraform apply failed: {apply_output}")
+        
+        # Broadcast apply completion
+        for attendee in attendees:
+            broadcast_deployment_log(
+                str(workshop_id),
+                str(attendee.id),
+                "apply",
+                "completed",
+                apply_output
+            )
         
         # Get outputs and map to attendees
         outputs = terraform_service.get_batch_outputs(workspace_name, len(attendees))
@@ -119,6 +185,16 @@ def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_numb
         
         for i, attendee in enumerate(attendees):
             attendee_key = f"attendee_{i}"
+            deployment_log = deployment_logs[str(attendee.id)]
+            
+            # Update progress for final phase
+            broadcast_deployment_progress(
+                str(workshop_id),
+                str(attendee.id),
+                90,
+                "Configuring access"
+            )
+            
             if attendee_key in outputs:
                 attendee_output = outputs[attendee_key]
                 attendee.ovh_project_id = attendee_output.get("project_id")
@@ -130,6 +206,19 @@ def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_numb
                     "user_urn": attendee_output.get("user_urn")
                 }
                 deployed_count += 1
+                
+                # Update deployment log to completed
+                deployment_log.status = "completed"
+                deployment_log.completed_at = datetime.utcnow()
+                deployment_log.terraform_output = apply_output
+                
+                # Final progress update
+                broadcast_deployment_progress(
+                    str(workshop_id),
+                    str(attendee.id),
+                    100,
+                    "Deployment completed"
+                )
                 
                 # Broadcast success
                 broadcast_status_update(
@@ -147,6 +236,11 @@ def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_numb
                 attendee_statuses[str(attendee.id)] = "failed"
                 failed_count += 1
                 
+                # Update deployment log to failed
+                deployment_log.status = "failed"
+                deployment_log.completed_at = datetime.utcnow()
+                deployment_log.error_message = "Failed to get terraform outputs"
+                
                 # Broadcast failure
                 broadcast_status_update(
                     str(workshop_id),
@@ -154,6 +248,14 @@ def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_numb
                     str(attendee.id),
                     "failed",
                     {"error": "Failed to get terraform outputs"}
+                )
+                
+                broadcast_deployment_log(
+                    str(workshop_id),
+                    str(attendee.id),
+                    "deploy",
+                    "failed",
+                    error="Failed to get terraform outputs"
                 )
         
         db.commit()
@@ -171,17 +273,33 @@ def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_numb
     except Exception as e:
         logger.error(f"Error deploying batch {batch_number}: {str(e)}")
         
-        # Mark all attendees in batch as failed
+        # Mark all attendees in batch as failed and update deployment logs
         for attendee_id in attendee_ids:
             attendee = db.query(Attendee).filter(Attendee.id == UUID(attendee_id)).first()
             if attendee:
                 attendee.status = "failed"
+                
+                # Update deployment log if it exists
+                if str(attendee.id) in deployment_logs:
+                    deployment_log = deployment_logs[str(attendee.id)]
+                    deployment_log.status = "failed"
+                    deployment_log.completed_at = datetime.utcnow()
+                    deployment_log.error_message = str(e)
+                
                 broadcast_status_update(
                     str(workshop_id),
                     "attendee",
                     str(attendee.id),
                     "failed",
                     {"error": str(e)}
+                )
+                
+                broadcast_deployment_log(
+                    str(workshop_id),
+                    str(attendee.id),
+                    "deploy",
+                    "failed",
+                    error=str(e)
                 )
         db.commit()
         
