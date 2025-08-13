@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import List, Optional
 from api.routes.auth import get_current_user
 from services.ovh_service_enhanced import enhanced_ovh_service
-from schemas.iam_policy import IAMPolicyResponse
+from schemas.iam_policy import IAMPolicyResponse, IAMPolicyBulkDeleteRequest
 from schemas.pci_project import PCIProjectAuditLog
 from api.websocket import manager
 from core.config import settings
@@ -142,17 +142,11 @@ async def delete_iam_policy(
 
 @router.post("/bulk-delete")
 async def bulk_delete_iam_policies(
-    policy_ids: List[str],
+    request: IAMPolicyBulkDeleteRequest,
     current_user: str = Depends(get_current_user)
 ):
     """Bulk delete IAM policies"""
-    if len(policy_ids) > 50:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete more than 50 policies at once"
-        )
-    
-    results = enhanced_ovh_service.bulk_delete_iam_policies(policy_ids, current_user)
+    results = enhanced_ovh_service.bulk_delete_iam_policies(request.policy_ids, current_user)
     
     # Broadcast bulk deletion via WebSocket
     await manager.broadcast_to_workshop(

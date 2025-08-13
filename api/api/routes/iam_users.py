@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import List, Optional, Dict
 from api.routes.auth import get_current_user
 from services.ovh_service_enhanced import enhanced_ovh_service
-from schemas.iam_user import IAMUserResponse, IAMUserFilterRequest
+from schemas.iam_user import IAMUserResponse, IAMUserFilterRequest, IAMUserBulkDeleteRequest
 from schemas.pci_project import PCIProjectAuditLog
 from api.websocket import manager
 from core.validation import InputValidator
@@ -128,13 +128,13 @@ async def delete_iam_user(
 
 @router.post("/bulk-delete")
 async def bulk_delete_iam_users(
-    usernames: List[str],
+    request: IAMUserBulkDeleteRequest,
     current_user: str = Depends(get_current_user)
 ):
     """Bulk delete IAM users"""
     # Validate usernames list
     usernames = InputValidator.validate_list_input(
-        usernames, "usernames", max_items=50, 
+        request.usernames, "usernames", max_items=50, 
         item_validator=InputValidator.validate_identifier
     )
     

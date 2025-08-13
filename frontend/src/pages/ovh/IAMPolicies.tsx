@@ -10,8 +10,11 @@ import {
   DocumentTextIcon,
   InformationCircleIcon,
   ChevronDownIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  TrashIcon,
+  CheckCircleIcon
 } from '@heroicons/react/24/outline';
+import BulkDeleteConfirmation from '../../components/BulkDeleteConfirmation';
 import { format } from 'date-fns';
 
 interface IAMPolicy {
@@ -33,10 +36,15 @@ const IAMPolicies: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedPolicies, setExpandedPolicies] = useState<Set<string>>(new Set());
+  const [selectedPolicies, setSelectedPolicies] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const fetchPolicies = async (useCache = true) => {
     setLoading(true);
     setError(null);
+    setSelectedPolicies(new Set()); // Clear selections on refresh
     try {
       const response = await fetch(`/api/ovh/iam-policies?use_cache=${useCache}`, {
         headers: {
@@ -84,6 +92,88 @@ const IAMPolicies: React.FC = () => {
     setExpandedPolicies(newExpanded);
   };
 
+  const handleSelectAll = () => {
+    if (selectedPolicies.size === filteredPolicies.length) {
+      setSelectedPolicies(new Set());
+    } else {
+      setSelectedPolicies(new Set(filteredPolicies.map(p => p.id)));
+    }
+  };
+
+  const handleSelectPolicy = (policyId: string) => {
+    const newSelected = new Set(selectedPolicies);
+    if (newSelected.has(policyId)) {
+      newSelected.delete(policyId);
+    } else {
+      newSelected.add(policyId);
+    }
+    setSelectedPolicies(newSelected);
+  };
+
+  const handleBulkDelete = async () => {
+    setIsDeleting(true);
+    setError(null);
+    setSuccessMessage(null);
+    
+    try {
+      const response = await fetch('/api/ovh/iam-policies/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          policy_ids: Array.from(selectedPolicies)
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to delete policies: ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
+      }
+
+      const result = await response.json();
+      
+      // Show success message
+      const successCount = result.success ? result.success.length : 0;
+      const failureCount = result.failed ? result.failed.length : 0;
+      
+      if (successCount > 0) {
+        setSuccessMessage(`✅ Successfully deleted ${successCount} polic${successCount > 1 ? 'ies' : 'y'}${failureCount > 0 ? `, ${failureCount} failed` : ''}`);
+        
+        // Clear selections immediately
+        setSelectedPolicies(new Set());
+        
+        // Refresh the list after a short delay
+        setTimeout(() => {
+          fetchPolicies(false);
+          setShowDeleteConfirm(false);
+        }, 1000);
+        
+        // Clear success message after 5 seconds
+        setTimeout(() => {
+          setSuccessMessage(null);
+        }, 5000);
+      } else {
+        setError(`❌ Failed to delete policies: ${failureCount} failures`);
+        // Keep error visible longer for failed operations
+        setTimeout(() => {
+          setError(null);
+        }, 7000);
+      }
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete policies';
+      setError(`❌ ${errorMessage}`);
+      // Keep error visible longer for exceptions
+      setTimeout(() => {
+        setError(null);
+      }, 7000);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     try {
@@ -117,6 +207,15 @@ const IAMPolicies: React.FC = () => {
               Cached data
             </div>
           )}
+          {selectedPolicies.size > 0 && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 transition-colors"
+            >
+              <TrashIcon className="h-4 w-4 mr-2" />
+              Delete ({selectedPolicies.size})
+            </button>
+          )}
           <button
             onClick={handleRefresh}
             disabled={loading}
@@ -128,17 +227,30 @@ const IAMPolicies: React.FC = () => {
         </div>
       </div>
 
-      {/* Search */}
+      {/* Search and Select All */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
-        <div className="relative">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search policies by name, description, owner, or ID..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-ovh-500 focus:ring-ovh-500"
-          />
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              checked={selectedPolicies.size === filteredPolicies.length && filteredPolicies.length > 0}
+              onChange={handleSelectAll}
+              className="h-4 w-4 text-ovh-600 focus:ring-ovh-500 border-gray-300 rounded"
+            />
+            <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+              Select All ({filteredPolicies.length})
+            </label>
+          </div>
+          <div className="flex-1 relative">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search policies by name, description, owner, or ID..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-ovh-500 focus:ring-ovh-500"
+            />
+          </div>
         </div>
       </div>
 
@@ -150,6 +262,19 @@ const IAMPolicies: React.FC = () => {
             <div className="ml-3">
               <h3 className="text-sm font-medium text-red-800 dark:text-red-400">Error</h3>
               <p className="mt-1 text-sm text-red-700 dark:text-red-300">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Message */}
+      {successMessage && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md p-4">
+          <div className="flex">
+            <CheckCircleIcon className="h-5 w-5 text-green-400" />
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-green-800 dark:text-green-400">Success</h3>
+              <p className="mt-1 text-sm text-green-700 dark:text-green-300">{successMessage}</p>
             </div>
           </div>
         </div>
@@ -184,6 +309,12 @@ const IAMPolicies: React.FC = () => {
                     <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedPolicies.has(policy.id)}
+                            onChange={() => handleSelectPolicy(policy.id)}
+                            className="h-4 w-4 text-ovh-600 focus:ring-ovh-500 border-gray-300 rounded"
+                          />
                           <button
                             onClick={() => togglePolicyExpansion(policy.id)}
                             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
@@ -332,11 +463,26 @@ const IAMPolicies: React.FC = () => {
               Showing: <span className="font-medium text-ovh-600">{filteredPolicies.length}</span>
             </span>
           )}
+          {selectedPolicies.size > 0 && (
+            <span className="ml-4">
+              Selected: <span className="font-medium text-red-600">{selectedPolicies.size}</span>
+            </span>
+          )}
           <span className="ml-4">
             Read-only: <span className="font-medium">{policies.filter(p => p.read_only).length}</span>
           </span>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <BulkDeleteConfirmation
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleBulkDelete}
+        resourceType="IAM Policies"
+        selectedCount={selectedPolicies.size}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };

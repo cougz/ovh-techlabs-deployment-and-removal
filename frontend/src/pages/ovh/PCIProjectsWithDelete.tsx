@@ -30,7 +30,7 @@ const PCIProjects: React.FC = () => {
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteResults, setDeleteResults] = useState<any>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const fetchProjects = async (useCache = true) => {
     setLoading(true);
@@ -80,7 +80,8 @@ const PCIProjects: React.FC = () => {
 
   const handleBulkDelete = async () => {
     setIsDeleting(true);
-    setDeleteResults(null);
+    setError(null);
+    setSuccessMessage(null);
     
     try {
       const response = await fetch('/api/ovh/pci-projects/bulk-delete', {
@@ -99,14 +100,23 @@ const PCIProjects: React.FC = () => {
       }
 
       const result = await response.json();
-      setDeleteResults(result);
       
-      // Refresh the list after deletion
+      // Show success message
+      setSuccessMessage(`✅ Bulk deletion initiated for ${selectedProjects.size} project${selectedProjects.size > 1 ? 's' : ''} (Task ID: ${result.task_id})`);
+      
+      // Clear selections immediately
+      setSelectedProjects(new Set());
+      
+      // Refresh the list and clear success message after a delay
       setTimeout(() => {
         fetchProjects(false);
         setShowDeleteConfirm(false);
-        setDeleteResults(null);
-      }, 3000);
+      }, 1000);
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 5000);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete projects');
@@ -216,18 +226,19 @@ const PCIProjects: React.FC = () => {
         </div>
       )}
 
-      {/* Delete Results */}
-      {deleteResults && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-4">
-          <h3 className="text-sm font-medium text-blue-800 dark:text-blue-400">Deletion Results</h3>
-          <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
-            Task ID: {deleteResults.task_id}
-          </p>
-          <p className="text-sm text-blue-700 dark:text-blue-300">
-            {deleteResults.message}
-          </p>
+      {/* Success Message */}
+      {successMessage && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md p-4">
+          <div className="flex">
+            <CheckCircleIcon className="h-5 w-5 text-green-400" />
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-green-800 dark:text-green-400">Success</h3>
+              <p className="mt-1 text-sm text-green-700 dark:text-green-300">{successMessage}</p>
+            </div>
+          </div>
         </div>
       )}
+
 
       {/* Projects Table */}
       <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
