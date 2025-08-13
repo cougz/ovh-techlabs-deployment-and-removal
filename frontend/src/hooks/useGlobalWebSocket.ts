@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQueryClient } from 'react-query';
 
+// Prevent multiple global WebSocket connections
+let globalWebSocket: WebSocket | null = null;
+
 interface WebSocketMessage {
   type: 'connection' | 'status_update' | 'deployment_log' | 'deployment_progress' | 'pong';
   timestamp: string;
@@ -39,6 +42,14 @@ export const useGlobalWebSocket = ({
   const queryClient = useQueryClient();
 
   const connect = useCallback(() => {
+    // Check if there's already a global connection in use
+    if (globalWebSocket?.readyState === WebSocket.OPEN || globalWebSocket?.readyState === WebSocket.CONNECTING) {
+      console.log('Using existing global WebSocket connection');
+      wsRef.current = globalWebSocket;
+      setIsConnected(globalWebSocket.readyState === WebSocket.OPEN);
+      return;
+    }
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
@@ -53,6 +64,7 @@ export const useGlobalWebSocket = ({
     try {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
+      globalWebSocket = ws; // Store as singleton
 
       ws.onopen = () => {
         console.log('Global WebSocket connected');
@@ -123,9 +135,14 @@ export const useGlobalWebSocket = ({
       };
 
       ws.onclose = (event) => {
-        console.log('Global WebSocket disconnected:', event.code, event.reason);
+        console.log(`Global WebSocket disconnected: code=${event.code}, reason="${event.reason}"`);
         setIsConnected(false);
         wsRef.current = null;
+        
+        // Clear singleton reference
+        if (globalWebSocket === ws) {
+          globalWebSocket = null;
+        }
 
         // Clear ping interval
         if (pingIntervalRef.current) {
@@ -133,18 +150,30 @@ export const useGlobalWebSocket = ({
           pingIntervalRef.current = null;
         }
 
-        // Attempt reconnection with exponential backoff
-        if (reconnectAttemptsRef.current < 5) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+        // Only reconnect on unexpected closures, not intentional ones
+        const shouldReconnect = event.code !== 1000 && // Normal closure
+                               event.code !== 1001 && // Going away
+                               event.code !== 1005 && // No status received
+                               event.code !== 3000;   // Custom app close codes
+        
+        if (shouldReconnect && reconnectAttemptsRef.current < 5) {
+          const baseDelay = 1000 * Math.pow(2, reconnectAttemptsRef.current);
+          const jitter = Math.random() * 1000;
+          const delay = Math.min(baseDelay + jitter, 30000);
+          
           reconnectAttemptsRef.current++;
           
-          console.log(`Global WebSocket reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`);
+          console.log(`Global WebSocket reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttemptsRef.current}/5) due to unexpected close`);
           
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
           }, delay);
+        } else if (shouldReconnect) {
+          console.log('Global WebSocket: Max reconnection attempts reached');
+          setConnectionError('Failed to connect to Global WebSocket after 5 attempts');
         } else {
-          setConnectionError('Failed to connect to Global WebSocket after multiple attempts');
+          console.log('Global WebSocket: Intentional close, not reconnecting');
+          reconnectAttemptsRef.current = 0; // Reset on intentional close
         }
       };
     } catch (error) {
@@ -182,13 +211,13 @@ export const useGlobalWebSocket = ({
     return false;
   }, []);
 
-  // Connect on mount and disconnect on unmount
+  // Connect on mount and disconnect on unmount  
   useEffect(() => {
     connect();
     return () => {
       disconnect();
     };
-  }, [connect, disconnect]);
+  }, []); // Only connect once on mount
 
   return {
     isConnected,

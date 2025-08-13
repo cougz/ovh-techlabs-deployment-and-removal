@@ -2,14 +2,17 @@ from fastapi import WebSocket, WebSocketDisconnect, Depends
 from typing import Dict, Set
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
+import time
 
 from core.database import get_db
 from sqlalchemy.orm import Session
 from api.routes.auth import verify_websocket_token
 
 logger = logging.getLogger(__name__)
+
+# WebSocket connection management
 
 class ConnectionManager:
     def __init__(self):

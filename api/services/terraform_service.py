@@ -486,19 +486,39 @@ class TerraformService:
         
         try:
             raw_outputs = json.loads(stdout)
+            logger.info(f"Raw terraform outputs for batch {workspace_name}: {list(raw_outputs.keys())}")
+            
             # Parse outputs for each attendee
             attendee_outputs = {}
             for i in range(attendee_count):
                 attendee_key = f"attendee_{i}"
+                
+                # Check if the expected outputs exist
+                project_id_key = f"project_id_{i}"
+                user_urn_key = f"user_urn_{i}"
+                username_key = f"username_{i}"
+                password_key = f"password_{i}"
+                
+                if project_id_key not in raw_outputs:
+                    logger.warning(f"Missing output key: {project_id_key}")
+                if user_urn_key not in raw_outputs:
+                    logger.warning(f"Missing output key: {user_urn_key}")
+                
                 attendee_outputs[attendee_key] = {
-                    "project_id": raw_outputs.get(f"project_id_{i}", {}).get("value"),
-                    "user_urn": raw_outputs.get(f"user_urn_{i}", {}).get("value"),
-                    "username": raw_outputs.get(f"username_{i}", {}).get("value"),
-                    "password": raw_outputs.get(f"password_{i}", {}).get("value")
+                    "project_id": raw_outputs.get(project_id_key, {}).get("value"),
+                    "user_urn": raw_outputs.get(user_urn_key, {}).get("value"),
+                    "username": raw_outputs.get(username_key, {}).get("value"),
+                    "password": raw_outputs.get(password_key, {}).get("value")
                 }
+                
+                logger.info(f"Parsed outputs for {attendee_key}: project_id={attendee_outputs[attendee_key]['project_id']}, user_urn={attendee_outputs[attendee_key]['user_urn']}")
+            
             return attendee_outputs
-        except json.JSONDecodeError:
-            logger.error(f"Invalid JSON in batch terraform outputs", workspace=workspace_name, stdout=stdout)
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in batch terraform outputs", workspace=workspace_name, error=str(e), stdout=stdout[:500])
+            return {}
+        except Exception as e:
+            logger.error(f"Unexpected error parsing batch outputs", workspace=workspace_name, error=str(e))
             return {}
     
     def _generate_batch_main_tf(self, config: Dict) -> str:

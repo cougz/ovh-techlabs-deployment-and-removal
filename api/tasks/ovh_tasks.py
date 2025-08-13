@@ -57,17 +57,18 @@ def sync_all_ovh_resources(performed_by: str = "system"):
     """Sync all OVH resources in parallel"""
     logger.info(f"Starting full OVH resources sync requested by {performed_by}")
     
+    # Execute sync tasks in parallel without blocking
     job = group(
         sync_pci_projects.s(performed_by),
         sync_iam_users.s(performed_by),
         sync_iam_policies.s(performed_by)
     )
     
+    # Apply tasks asynchronously - don't wait for results in the task
     result = job.apply_async()
-    sync_results = result.get()
     
-    logger.info(f"Full OVH resources sync completed: {sync_results}")
-    return sync_results
+    logger.info(f"Full OVH resources sync initiated by {performed_by}")
+    return f"Sync tasks dispatched: {result.id}"
 
 @celery_app.task
 def sync_pci_projects(performed_by: str = "system"):

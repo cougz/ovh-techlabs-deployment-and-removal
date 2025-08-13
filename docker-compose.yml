@@ -54,6 +54,7 @@ services:
       - OVH_CONSUMER_KEY=${OVH_CONSUMER_KEY}
       - TERRAFORM_BINARY_PATH=${TERRAFORM_BINARY_PATH}
       - TERRAFORM_WORKSPACE_DIR=${TERRAFORM_WORKSPACE_DIR}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - terraform_workspaces:/tmp/terraform-workspaces
@@ -91,6 +92,7 @@ services:
       - OVH_CONSUMER_KEY=${OVH_CONSUMER_KEY}
       - TERRAFORM_BINARY_PATH=${TERRAFORM_BINARY_PATH}
       - TERRAFORM_WORKSPACE_DIR=${TERRAFORM_WORKSPACE_DIR}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - terraform_workspaces:/tmp/terraform-workspaces
@@ -130,6 +132,7 @@ services:
       - OVH_CONSUMER_KEY=${OVH_CONSUMER_KEY}
       - TERRAFORM_BINARY_PATH=${TERRAFORM_BINARY_PATH}
       - TERRAFORM_WORKSPACE_DIR=${TERRAFORM_WORKSPACE_DIR}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy

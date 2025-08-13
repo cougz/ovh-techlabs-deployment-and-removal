@@ -70,7 +70,8 @@ def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_numb
         # Create batch workspace
         workspace_name = f"workshop-{workshop_id}-batch-{batch_number}"
         
-        # Generate batch terraform configuration
+        # Generate batch terraform configuration with unique project names
+        import secrets
         batch_config = {
             "workshop_id": workshop_id,
             "batch_number": batch_number,
@@ -79,7 +80,8 @@ def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_numb
                     "id": str(a.id),
                     "username": a.username,
                     "email": a.email,
-                    "project_description": f"TechLabs environment for {a.username}"
+                    # Generate unique project name with attendee name and random suffix
+                    "project_description": f"TechLabs-{a.username}-{secrets.token_hex(4)}"
                 }
                 for a in attendees
             ]
@@ -178,6 +180,14 @@ def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_numb
         # Get outputs and map to attendees
         outputs = terraform_service.get_batch_outputs(workspace_name, len(attendees))
         
+        # Log outputs for debugging
+        logger.info(f"Batch {batch_number} terraform outputs retrieved: {len(outputs)} attendee outputs")
+        if not outputs:
+            logger.error(f"Failed to get terraform outputs for batch {batch_number}, but apply was successful")
+            # Try to get raw outputs for debugging
+            raw_outputs = terraform_service.get_outputs(workspace_name)
+            logger.error(f"Raw terraform outputs: {raw_outputs}")
+        
         deployed_count = 0
         failed_count = 0
         attendee_statuses = {}
@@ -232,6 +242,10 @@ def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_numb
                     }
                 )
             else:
+                # Log why this attendee is being marked as failed
+                logger.error(f"Attendee {attendee.id} ({attendee.username}) marked as failed: key '{attendee_key}' not found in outputs")
+                logger.error(f"Available output keys: {list(outputs.keys())}")
+                
                 attendee.status = "failed"
                 attendee_statuses[str(attendee.id)] = "failed"
                 failed_count += 1
@@ -239,7 +253,7 @@ def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_numb
                 # Update deployment log to failed
                 deployment_log.status = "failed"
                 deployment_log.completed_at = datetime.utcnow()
-                deployment_log.error_message = "Failed to get terraform outputs"
+                deployment_log.error_message = f"Failed to get terraform outputs - key '{attendee_key}' not found"
                 
                 # Broadcast failure
                 broadcast_status_update(
@@ -715,10 +729,14 @@ def deploy_workshop_attendees_sequential(self, workshop_id: str):
                     db.commit()
                     
                 # Add cooldown between batches (5 minutes as per example)
-                if batch_idx + batch_size < len(attendees):
-                    logger.info("Waiting 5 minutes before next batch to avoid API rate limits")
+                # Check if this is NOT the last batch
+                next_batch_start = batch_idx + batch_size
+                if next_batch_start < len(attendees):
+                    logger.info(f"Waiting 5 minutes before next batch to avoid API rate limits (batch {batch_idx//batch_size + 1} complete, {len(attendees) - next_batch_start} attendees remaining)")
                     import time
                     time.sleep(300)  # 5 minutes cooldown
+                else:
+                    logger.info(f"Final batch {batch_idx//batch_size + 1} complete - no cooldown needed")
                     
             except Exception as e:
                 logger.error(f"Exception during batch deployment: {str(e)}")

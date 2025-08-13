@@ -30,7 +30,9 @@ def send_websocket_update(workshop_id: str, message: dict):
         
         response = requests.post(url, json=payload, headers=headers, timeout=5)
         if response.status_code != 200:
-            logger.error(f"Failed to send WebSocket update: {response.status_code}")
+            logger.error(f"Failed to send WebSocket update: {response.status_code} - {response.text}")
+            if response.status_code == 401:
+                logger.error(f"Authentication failed - Internal API key mismatch. Using key: {settings.INTERNAL_API_KEY[:8]}...")
     except Exception as e:
         logger.error(f"Error sending WebSocket update: {e}")
 

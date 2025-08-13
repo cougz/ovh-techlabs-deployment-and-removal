@@ -38,7 +38,12 @@ const IAMUsers: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [fromCache, setFromCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<FilterOptions>({});
+  const [filters, setFilters] = useState<FilterOptions>({
+    search: '',
+    group: '',
+    status: '',
+    created_after: ''
+  });
   const [showFilters, setShowFilters] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -284,7 +289,7 @@ const IAMUsers: React.FC = () => {
           <input
             type="text"
             placeholder="Search users by username, email, or description..."
-            value={filters.search || ''}
+            value={filters.search}
             onChange={(e) => setFilters({...filters, search: e.target.value})}
             className="pl-10 w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-ovh-500 focus:ring-ovh-500"
           />
