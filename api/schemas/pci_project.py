@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List, Union
+from pydantic import BaseModel, Field, field_validator, field_serializer
+from typing import Optional, List, Union, Any
 from datetime import datetime
 import re
 
@@ -15,11 +15,11 @@ class PCIProjectResponse(BaseModel):
 
 class PCIProjectBulkDeleteRequest(BaseModel):
     """Request schema for bulk delete operations"""
-    service_ids: List[str] = Field(
+    service_ids: List[Union[str, int]] = Field(
         ..., 
         min_items=1, 
         max_items=50,
-        description="List of service IDs to delete"
+        description="List of service IDs to delete (strings or integers)"
     )
     
     @field_validator('service_ids')
@@ -30,21 +30,19 @@ class PCIProjectBulkDeleteRequest(BaseModel):
         
         validated_ids = []
         for service_id in v:
-            if not service_id or not isinstance(service_id, str):
-                raise ValueError("Service ID must be a non-empty string")
-            
-            # Remove whitespace
-            service_id = service_id.strip()
+            # Convert to string (handles both int and str inputs)
+            service_id = str(service_id).strip()
             
             if not service_id:
                 raise ValueError("Service ID cannot be empty or whitespace")
             
-            # Validate format - only alphanumeric, hyphens, underscores
-            if not re.match(r'^[a-zA-Z0-9\-_]+$', service_id):
-                raise ValueError(f"Invalid service ID format: {service_id}")
-            
-            if len(service_id) > 50:
+            # Validate reasonable length
+            if len(service_id) > 100:
                 raise ValueError(f"Service ID too long: {service_id}")
+            
+            # Basic format validation - allow alphanumeric and common special characters
+            if not re.match(r'^[a-zA-Z0-9\-_.@+]+$', service_id):
+                raise ValueError(f"Invalid service ID format: {service_id}")
             
             validated_ids.append(service_id)
         
@@ -57,7 +55,7 @@ class PCIProjectBulkDeleteRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "service_ids": ["12345", "67890", "11111"]
+                "service_ids": [12345, "67890", 11111]
             }
         }
 

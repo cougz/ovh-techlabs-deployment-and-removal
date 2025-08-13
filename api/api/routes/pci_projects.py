@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from typing import List, Optional, Dict
 from pydantic import BaseModel
 from api.routes.auth import get_current_user
@@ -152,15 +152,48 @@ async def delete_pci_project(
             detail=f"Failed to delete PCI project {service_id}"
         )
 
+@router.post("/bulk-delete-debug")
+async def bulk_delete_debug(
+    raw_request: Request,
+    current_user: str = Depends(get_current_user)
+):
+    """Debug endpoint to see raw request data"""
+    try:
+        body = await raw_request.body()
+        logger.info(f"DEBUG - Raw request body: {body.decode('utf-8')}")
+        
+        import json
+        data = json.loads(body.decode('utf-8'))
+        logger.info(f"DEBUG - Parsed JSON: {data}")
+        
+        return {"debug": "success", "data": data}
+    except Exception as e:
+        logger.error(f"DEBUG - Error: {str(e)}")
+        return {"debug": "error", "error": str(e)}
+
 @router.post("/bulk-delete", response_model=BulkDeleteResponse)
 async def bulk_delete_pci_projects(
+    raw_request: Request,
     request: PCIProjectBulkDeleteRequest,
     current_user: str = Depends(get_current_user)
 ):
     """Bulk delete PCI projects"""
+    # Log raw request body for debugging
+    try:
+        body = await raw_request.body()
+        logger.info(f"Raw request body: {body.decode('utf-8')}")
+    except Exception as e:
+        logger.warning(f"Could not read raw body: {e}")
+    
     # Log the request for debugging
-    logger.debug(f"Bulk delete request received: {request}")
-    logger.debug(f"Service IDs: {request.service_ids}")
+    logger.info(f"Bulk delete request received from user: {current_user}")
+    logger.info(f"Parsed request: {request}")
+    logger.info(f"Service IDs: {request.service_ids}")
+    logger.info(f"Number of service IDs: {len(request.service_ids)}")
+    
+    # Log each service ID individually for debugging
+    for i, service_id in enumerate(request.service_ids):
+        logger.info(f"Service ID {i}: '{service_id}' (type: {type(service_id)}, length: {len(str(service_id))})")
     
     if not request.service_ids or len(request.service_ids) == 0:
         raise HTTPException(

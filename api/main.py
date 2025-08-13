@@ -61,6 +61,29 @@ app.add_middleware(
     max_age=3600  # Cache preflight for 1 hour
 )
 
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    # Log all requests to PCI projects endpoints
+    if "pci-projects" in str(request.url):
+        logger.info(f"REQUEST DEBUG: {request.method} {request.url}")
+        logger.info(f"REQUEST DEBUG: Headers: {dict(request.headers)}")
+        
+        # Read body for POST requests
+        if request.method == "POST":
+            try:
+                body = await request.body()
+                logger.info(f"REQUEST DEBUG: Body: {body.decode('utf-8')}")
+            except Exception as e:
+                logger.info(f"REQUEST DEBUG: Could not read body: {e}")
+    
+    response = await call_next(request)
+    
+    if "pci-projects" in str(request.url):
+        logger.info(f"RESPONSE DEBUG: Status: {response.status_code}")
+        
+    return response
+
 # Security headers middleware
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):

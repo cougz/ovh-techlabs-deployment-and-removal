@@ -22,10 +22,9 @@ interface PCIProject {
   termination_date?: string;
 }
 
-interface BulkDeleteResult {
-  success: string[];
-  failed: Array<{id: string; error: string}>;
-  total: number;
+interface BulkDeleteResponse {
+  message: string;
+  task_id: string;
 }
 
 const PCIProjects: React.FC = () => {
@@ -118,16 +117,26 @@ const PCIProjects: React.FC = () => {
             throw new Error(`Bulk delete failed: ${response.statusText}`);
           }
 
-          const result: BulkDeleteResult = await response.json();
+          const result: BulkDeleteResponse = await response.json();
           
-          // Show results (simplified for now - could use notification dialog)
-          if (result.failed.length > 0) {
-            setError(`Deletion completed with failures: ${result.success.length} successful, ${result.failed.length} failed`);
-          }
+          // Show success message
+          console.log('Bulk delete initiated:', result.message);
+          
+          // Show a temporary success message
+          setError(null); // Clear any previous errors
+          
+          // Show success notification (using error state for now to display message)
+          setTimeout(() => {
+            setError(`✅ ${result.message} (Task ID: ${result.task_id})`);
+            // Clear the message after 5 seconds
+            setTimeout(() => setError(null), 5000);
+          }, 100);
 
-          // Refresh the list and clear selection
+          // Refresh the list and clear selection after a short delay to allow background processing
           setSelectedProjects([]);
-          fetchProjects(false, filterState, searchQuery); // Pass filters here
+          setTimeout(() => {
+            fetchProjects(false, filterState, searchQuery); // Pass filters here
+          }, 1000);
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Bulk delete failed');
         } finally {
