@@ -48,7 +48,7 @@ def update_workshop_status_based_on_attendees(db: Session, workshop_id: UUID):
         logger.error(f"Error updating workshop status: {str(e)}")
         db.rollback()
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, soft_time_limit=60*60, time_limit=70*60)  # 60 min soft, 70 min hard
 def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_number: int):
     """Deploy a batch of up to 3 attendees using a single OVH cart."""
     db = SessionLocal()
@@ -702,7 +702,7 @@ def health_check_resources():
     finally:
         db.close()
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, soft_time_limit=3*60*60, time_limit=4*60*60)  # 3 hours soft, 4 hours hard
 def deploy_workshop_attendees_sequential(self, workshop_id: str):
     """Deploy all attendees in a workshop sequentially in batches of 3 to avoid OVH cart limitations."""
     db = SessionLocal()
