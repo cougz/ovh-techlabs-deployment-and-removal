@@ -115,7 +115,8 @@ async def get_attendee_credentials(
     current_user: str = Depends(get_current_user)
 ):
     """Get attendee's OVH IAM credentials from Terraform outputs."""
-    from core.logging import logger
+    from core.logging import get_logger
+    logger = get_logger(__name__)
     
     logger.info(f"Getting credentials for attendee: {attendee_id}")
     attendee = db.query(Attendee).filter(Attendee.id == attendee_id).first()
