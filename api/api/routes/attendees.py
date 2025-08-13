@@ -115,16 +115,23 @@ async def get_attendee_credentials(
     current_user: str = Depends(get_current_user)
 ):
     """Get attendee's OVH IAM credentials from Terraform outputs."""
+    from core.logging import logger
+    
+    logger.info(f"Getting credentials for attendee: {attendee_id}")
     attendee = db.query(Attendee).filter(Attendee.id == attendee_id).first()
     
     if not attendee:
+        logger.error(f"Attendee not found: {attendee_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Attendee not found"
         )
     
+    logger.info(f"Attendee found: {attendee.id}, status: {attendee.status}, workshop: {attendee.workshop_id}")
+    
     # Check if attendee has been deployed
     if attendee.status != "active":
+        logger.error(f"Attendee not active: {attendee_id}, status: {attendee.status}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No credentials available - attendee not deployed"
@@ -157,6 +164,8 @@ async def get_attendee_credentials(
     batch_number = attendee_position // batch_size + 1
     position_in_batch = attendee_position % batch_size
     batch_workspace_name = f"workshop-{attendee.workshop_id}-batch-{batch_number}"
+    
+    logger.info(f"Batch calculation: attendee_position={attendee_position}, batch_number={batch_number}, position_in_batch={position_in_batch}, batch_workspace_name={batch_workspace_name}")
     
     # Get batch outputs
     batch_outputs = terraform_service.get_batch_outputs(batch_workspace_name, batch_size)
