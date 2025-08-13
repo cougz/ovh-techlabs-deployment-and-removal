@@ -721,7 +721,7 @@ resource "random_string" "project_suffix" {
 resource "ovh_cloud_project" "workshop_project" {
   ovh_subsidiary = data.ovh_order_cart.mycart.ovh_subsidiary
   description    = var.project_description
-  project_name   = "${local.sanitized_username}-${random_string.project_suffix.result}"
+  project_name   = "TechLabs-${local.sanitized_username}-${random_string.project_suffix.result}"
 
   plan {
     duration     = data.ovh_order_cart_product_plan.cloud.selected_price.0.duration
