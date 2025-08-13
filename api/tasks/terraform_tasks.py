@@ -49,6 +49,153 @@ def update_workshop_status_based_on_attendees(db: Session, workshop_id: UUID):
         db.rollback()
 
 @celery_app.task(bind=True)
+def deploy_attendee_batch(self, workshop_id: str, attendee_ids: list, batch_number: int):
+    """Deploy a batch of up to 3 attendees using a single OVH cart."""
+    db = SessionLocal()
+    
+    try:
+        # Get all attendees in the batch
+        attendees = []
+        for attendee_id in attendee_ids:
+            attendee = db.query(Attendee).filter(Attendee.id == UUID(attendee_id)).first()
+            if attendee:
+                attendees.append(attendee)
+        
+        if not attendees:
+            return {"error": "No attendees found in batch", "deployed_count": 0, "failed_count": 0}
+        
+        logger.info(f"Deploying batch {batch_number} with {len(attendees)} attendees")
+        
+        # Create batch workspace
+        workspace_name = f"workshop-{workshop_id}-batch-{batch_number}"
+        
+        # Generate batch terraform configuration
+        batch_config = {
+            "workshop_id": workshop_id,
+            "batch_number": batch_number,
+            "attendees": [
+                {
+                    "id": str(a.id),
+                    "username": a.username,
+                    "email": a.email,
+                    "project_description": f"TechLabs environment for {a.username}"
+                }
+                for a in attendees
+            ]
+        }
+        
+        # Broadcast batch deployment start
+        for attendee in attendees:
+            broadcast_status_update(
+                str(workshop_id),
+                "attendee",
+                str(attendee.id),
+                "deploying"
+            )
+        
+        # Create terraform workspace with batch configuration
+        if not terraform_service.create_batch_workspace(workspace_name, batch_config):
+            raise Exception("Failed to create batch terraform workspace")
+        
+        # Plan deployment
+        logger.info(f"Planning batch deployment {batch_number}")
+        success, plan_output = terraform_service.plan(workspace_name)
+        if not success:
+            raise Exception(f"Batch terraform plan failed: {plan_output}")
+        
+        # Apply deployment
+        logger.info(f"Applying batch deployment {batch_number}")
+        success, apply_output, recovered = terraform_service.apply_with_recovery(workspace_name, batch_config)
+        if not success:
+            raise Exception(f"Batch terraform apply failed: {apply_output}")
+        
+        # Get outputs and map to attendees
+        outputs = terraform_service.get_batch_outputs(workspace_name, len(attendees))
+        
+        deployed_count = 0
+        failed_count = 0
+        attendee_statuses = {}
+        attendee_outputs = {}
+        
+        for i, attendee in enumerate(attendees):
+            attendee_key = f"attendee_{i}"
+            if attendee_key in outputs:
+                attendee_output = outputs[attendee_key]
+                attendee.ovh_project_id = attendee_output.get("project_id")
+                attendee.ovh_user_urn = attendee_output.get("user_urn")
+                attendee.status = "active"
+                attendee_statuses[str(attendee.id)] = "active"
+                attendee_outputs[str(attendee.id)] = {
+                    "project_id": attendee_output.get("project_id"),
+                    "user_urn": attendee_output.get("user_urn")
+                }
+                deployed_count += 1
+                
+                # Broadcast success
+                broadcast_status_update(
+                    str(workshop_id),
+                    "attendee",
+                    str(attendee.id),
+                    "active",
+                    {
+                        "project_id": attendee_output.get("project_id"),
+                        "user_urn": attendee_output.get("user_urn")
+                    }
+                )
+            else:
+                attendee.status = "failed"
+                attendee_statuses[str(attendee.id)] = "failed"
+                failed_count += 1
+                
+                # Broadcast failure
+                broadcast_status_update(
+                    str(workshop_id),
+                    "attendee",
+                    str(attendee.id),
+                    "failed",
+                    {"error": "Failed to get terraform outputs"}
+                )
+        
+        db.commit()
+        
+        logger.info(f"Batch {batch_number} deployment completed: {deployed_count} deployed, {failed_count} failed")
+        
+        return {
+            "success": True,
+            "deployed_count": deployed_count,
+            "failed_count": failed_count,
+            "attendee_statuses": attendee_statuses,
+            "attendee_outputs": attendee_outputs
+        }
+        
+    except Exception as e:
+        logger.error(f"Error deploying batch {batch_number}: {str(e)}")
+        
+        # Mark all attendees in batch as failed
+        for attendee_id in attendee_ids:
+            attendee = db.query(Attendee).filter(Attendee.id == UUID(attendee_id)).first()
+            if attendee:
+                attendee.status = "failed"
+                broadcast_status_update(
+                    str(workshop_id),
+                    "attendee",
+                    str(attendee.id),
+                    "failed",
+                    {"error": str(e)}
+                )
+        db.commit()
+        
+        return {
+            "success": False,
+            "error": str(e),
+            "deployed_count": 0,
+            "failed_count": len(attendee_ids)
+        }
+        
+    finally:
+        db.close()
+
+@celery_app.task(bind=True)
 def deploy_attendee_resources(self, attendee_id: str):
     """Deploy OVH resources for a specific attendee."""
     db = SessionLocal()
@@ -393,7 +540,7 @@ def health_check_resources():
 
 @celery_app.task(bind=True)
 def deploy_workshop_attendees_sequential(self, workshop_id: str):
-    """Deploy all attendees in a workshop sequentially to avoid quota issues."""
+    """Deploy all attendees in a workshop sequentially in batches of 3 to avoid OVH cart limitations."""
     db = SessionLocal()
     
     try:
@@ -410,53 +557,56 @@ def deploy_workshop_attendees_sequential(self, workshop_id: str):
             db.commit()
             return {"message": "No attendees to deploy", "attendees_deployed": 0}
         
-        logger.info(f"Starting sequential deployment of {len(attendees)} attendees for workshop {workshop_id}")
+        logger.info(f"Starting batched deployment of {len(attendees)} attendees for workshop {workshop_id}")
         
         deployed_count = 0
         failed_count = 0
         
-        for i, attendee in enumerate(attendees):
-            logger.info(f"Deploying attendee {i+1}/{len(attendees)}: {attendee.username}")
+        # Process attendees in batches of 3 (OVH cart limitation)
+        batch_size = 3
+        for batch_idx in range(0, len(attendees), batch_size):
+            batch = attendees[batch_idx:batch_idx + batch_size]
+            logger.info(f"Processing batch {batch_idx//batch_size + 1} with {len(batch)} attendees")
             
-            # Update task progress
-            self.update_state(
-                state='PROGRESS',
-                meta={
-                    'current': i + 1,
-                    'total': len(attendees),
-                    'status': f'Deploying {attendee.username}',
-                    'attendee_id': str(attendee.id)
-                }
-            )
-            
-            # Broadcast workshop deployment progress
-            broadcast_deployment_progress(
-                str(workshop_id),
-                i + 1,
-                len(attendees),
-                f"Deploying {attendee.username}..."
-            )
-            
+            # Deploy batch of attendees together
             try:
-                # Call the individual attendee deployment task synchronously
-                result = deploy_attendee_resources.apply(args=[str(attendee.id)])
+                batch_result = deploy_attendee_batch.apply(args=[workshop_id, [str(a.id) for a in batch], batch_idx//batch_size])
                 
-                if result.successful() and not result.result.get('error'):
-                    deployed_count += 1
-                    logger.info(f"Successfully deployed {attendee.username}")
-                else:
-                    failed_count += 1
-                    error_msg = result.result.get('error', 'Unknown error')
-                    logger.error(f"Failed to deploy {attendee.username}: {error_msg}")
+                if batch_result.successful():
+                    result = batch_result.result
+                    deployed_count += result.get('deployed_count', 0)
+                    failed_count += result.get('failed_count', 0)
                     
-                    # If deployment fails, mark attendee as failed and continue with next
-                    attendee.status = 'failed'
+                    # Update attendee statuses based on batch result
+                    for attendee_id, status in result.get('attendee_statuses', {}).items():
+                        att = db.query(Attendee).filter(Attendee.id == UUID(attendee_id)).first()
+                        if att:
+                            att.status = status
+                            if status == 'active' and 'attendee_outputs' in result:
+                                outputs = result['attendee_outputs'].get(attendee_id, {})
+                                if 'project_id' in outputs:
+                                    att.ovh_project_id = outputs['project_id']
+                                if 'user_urn' in outputs:
+                                    att.ovh_user_urn = outputs['user_urn']
+                    db.commit()
+                else:
+                    # If batch fails, mark all attendees in batch as failed
+                    for attendee in batch:
+                        attendee.status = 'failed'
+                        failed_count += 1
                     db.commit()
                     
+                # Add cooldown between batches (5 minutes as per example)
+                if batch_idx + batch_size < len(attendees):
+                    logger.info("Waiting 5 minutes before next batch to avoid API rate limits")
+                    import time
+                    time.sleep(300)  # 5 minutes cooldown
+                    
             except Exception as e:
-                failed_count += 1
-                logger.error(f"Exception during deployment of {attendee.username}: {str(e)}")
-                attendee.status = 'failed'
+                logger.error(f"Exception during batch deployment: {str(e)}")
+                for attendee in batch:
+                    attendee.status = 'failed'
+                    failed_count += 1
                 db.commit()
         
         # Update workshop status based on deployment results

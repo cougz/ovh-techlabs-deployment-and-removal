@@ -424,6 +424,206 @@ class TerraformService:
             logger.error(f"Error cleaning up terraform workspace", workspace=workspace_name, error=str(e))
             return False
     
+    def create_batch_workspace(self, workspace_name: str, batch_config: Dict) -> bool:
+        """Create a new Terraform workspace for a batch of attendees (up to 3)."""
+        workspace_path = self._get_workspace_path(workspace_name)
+        
+        logger.info(f"Creating batch workspace: {workspace_name}")
+        logger.info(f"Workspace path: {workspace_path}")
+        logger.info(f"Config: {batch_config}")
+        
+        try:
+            # Create workspace directory
+            workspace_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Created workspace directory: {workspace_path}")
+            
+            # Write main.tf for batch
+            main_tf_content = self._generate_batch_main_tf(batch_config)
+            main_tf_path = workspace_path / "main.tf"
+            with open(main_tf_path, "w") as f:
+                f.write(main_tf_content)
+            logger.info(f"Written batch main.tf to: {main_tf_path}")
+            
+            # Write terraform.tfvars for batch
+            tfvars_content = self._generate_batch_tfvars(batch_config)
+            tfvars_path = workspace_path / "terraform.tfvars"
+            with open(tfvars_path, "w") as f:
+                f.write(tfvars_content)
+            logger.info(f"Written batch terraform.tfvars to: {tfvars_path}")
+            
+            # Initialize terraform
+            logger.info(f"Initializing batch terraform workspace: {workspace_name}")
+            return_code, stdout, stderr = self._run_terraform_command(
+                ["init"], workspace_path
+            )
+            
+            if return_code != 0:
+                logger.error(f"Failed to initialize batch terraform workspace: {workspace_name}")
+                logger.error(f"Init stderr: {stderr}")
+                return False
+            
+            logger.info(f"Created batch terraform workspace", workspace=workspace_name)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error creating batch terraform workspace", workspace=workspace_name, error=str(e))
+            return False
+    
+    def get_batch_outputs(self, workspace_name: str, attendee_count: int) -> Dict:
+        """Get terraform outputs for a batch deployment."""
+        workspace_path = self._get_workspace_path(workspace_name)
+        
+        if not workspace_path.exists():
+            return {}
+        
+        return_code, stdout, stderr = self._run_terraform_command(
+            ["output", "-json"], workspace_path
+        )
+        
+        if return_code != 0:
+            logger.error(f"Failed to get batch terraform outputs", workspace=workspace_name, stderr=stderr)
+            return {}
+        
+        try:
+            raw_outputs = json.loads(stdout)
+            # Parse outputs for each attendee
+            attendee_outputs = {}
+            for i in range(attendee_count):
+                attendee_key = f"attendee_{i}"
+                attendee_outputs[attendee_key] = {
+                    "project_id": raw_outputs.get(f"project_id_{i}", {}).get("value"),
+                    "user_urn": raw_outputs.get(f"user_urn_{i}", {}).get("value"),
+                    "username": raw_outputs.get(f"username_{i}", {}).get("value"),
+                    "password": raw_outputs.get(f"password_{i}", {}).get("value")
+                }
+            return attendee_outputs
+        except json.JSONDecodeError:
+            logger.error(f"Invalid JSON in batch terraform outputs", workspace=workspace_name, stdout=stdout)
+            return {}
+    
+    def _generate_batch_main_tf(self, config: Dict) -> str:
+        """Generate main.tf content for batch deployment (up to 3 attendees per cart)."""
+        attendees = config.get('attendees', [])
+        batch_number = config.get('batch_number', 0)
+        
+        if not attendees or len(attendees) > 3:
+            raise ValueError(f"Invalid attendee count for batch: {len(attendees)}. Must be 1-3.")
+        
+        template = '''
+terraform {
+  required_providers {
+    ovh = {
+      source = "ovh/ovh"
+    }
+    time = {
+      source = "hashicorp/time"
+    }
+  }
+}
+
+# Provider configuration
+provider "ovh" {
+  endpoint = "ovh-eu"
+}
+
+# Get account info for subsidiary
+data "ovh_me" "myaccount" {}
+
+# Create cart for this batch
+data "ovh_order_cart" "batch_cart" {
+  ovh_subsidiary = data.ovh_me.myaccount.ovh_subsidiary
+}
+
+# Get cloud project plan
+data "ovh_order_cart_product_plan" "cloud" {
+  cart_id        = data.ovh_order_cart.batch_cart.id
+  price_capacity = "renew"
+  product        = "cloud"
+  plan_code      = "project.2018"
+}
+'''
+        
+        # Generate resources for each attendee in the batch
+        for i, attendee in enumerate(attendees):
+            username = attendee['username']
+            email = attendee['email']
+            project_description = attendee['project_description']
+            password = self._generate_secure_password(username)
+            
+            # Sanitize username for resource names
+            sanitized_username = username.lower()
+            sanitized_username = sanitized_username.replace('.', '-').replace(' ', '-').replace('@', '-at-')
+            
+            # Add dependencies to ensure sequential creation within the cart
+            depends_on = ""
+            if i > 0:
+                depends_on = f'  depends_on = [ovh_cloud_project.project_{i-1}]'
+            
+            template += f'''
+# Resources for attendee {i}: {username}
+# ======================================
+
+# Create OVH Public Cloud Project {i}
+resource "ovh_cloud_project" "project_{i}" {{
+  ovh_subsidiary = data.ovh_order_cart.batch_cart.ovh_subsidiary
+  description    = "{project_description}"
+{depends_on}
+
+  plan {{
+    duration     = data.ovh_order_cart_product_plan.cloud.selected_price.0.duration
+    plan_code    = data.ovh_order_cart_product_plan.cloud.plan_code
+    pricing_mode = data.ovh_order_cart_product_plan.cloud.selected_price.0.pricing_mode
+  }}
+}}
+
+# Create IAM user {i}
+resource "ovh_me_identity_user" "user_{i}" {{
+  description = "{username}"
+  email       = "{email}"
+  group       = "UNPRIVILEGED"
+  login       = "{username}"
+  password    = "{password}"
+}}
+
+# Create IAM policy {i}
+resource "ovh_iam_policy" "policy_{i}" {{
+  name        = "access-grant-for-pci-project-{sanitized_username}"
+  description = "Grants access to {username} for PCI project ${{ovh_cloud_project.project_{i}.project_id}}"
+  identities  = [ovh_me_identity_user.user_{i}.urn]
+  resources   = [ovh_cloud_project.project_{i}.urn]
+  allow       = ["*"]
+}}
+
+# Outputs for attendee {i}
+output "project_id_{i}" {{
+  value = ovh_cloud_project.project_{i}.project_id
+}}
+
+output "project_urn_{i}" {{
+  value = ovh_cloud_project.project_{i}.urn
+}}
+
+output "user_urn_{i}" {{
+  value = ovh_me_identity_user.user_{i}.urn
+}}
+
+output "username_{i}" {{
+  value = ovh_me_identity_user.user_{i}.login
+}}
+
+output "password_{i}" {{
+  value = ovh_me_identity_user.user_{i}.password
+  sensitive = true
+}}
+'''
+        
+        return template.strip()
+    
+    def _generate_batch_tfvars(self, config: Dict) -> str:
+        """Generate terraform.tfvars content for batch deployment."""
+        # For batch deployments, we don't need tfvars as everything is embedded in main.tf
+        return "# Batch deployment - all variables are embedded in main.tf"
+    
     def _generate_main_tf(self, config: Dict) -> str:
         """Generate main.tf content from configuration."""
         template = '''
