@@ -170,5 +170,11 @@ except Exception as e:
 echo "✅ Database setup completed!"
 
 # Start the application
-echo "🎯 Starting FastAPI application..."
-exec uvicorn main:app --host 0.0.0.0 --port 8000
+# Check if any command was passed as arguments
+if [ $# -gt 0 ]; then
+    echo "🎯 Running command: $@"
+    exec "$@"
+else
+    echo "🎯 Starting FastAPI application..."
+    exec uvicorn main:app --host 0.0.0.0 --port 8000
+fi
